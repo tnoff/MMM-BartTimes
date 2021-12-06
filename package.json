@@ -1,0 +1,25 @@
+{
+  "name": "mmm-barttimes",
+  "version": "1.0.0",
+  "description": "A MagicMirror module that displays BART times for the given stops",
+  "main": "MMM-BartTimes.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LostVector/MMM-BartTimes"
+  },
+  "keywords": [
+    "magic mirror",
+    "smart mirror",
+    "module",
+    "bart",
+    "sf",
+    "train times"
+  ],
+  "homepage": "https://github.com/LostVector/MMM-BartTimes#readme",
+  "dependencies": {
+    "request": "~2.88.2"
+  }
+}
