@@ -6,7 +6,7 @@ This exists thanks to BART providing an easy public API, which can be found [her
 
 ### Installation
 1. Navigate to the magic mirror modules directory and clone this repository there.
-2. Inside the `MMM-BartTimes` folder, run `npm install url requests` to install the two required dependencies.
+2. Inside the `MMM-BartTimes` folder, run `npm install url needle` to install the two required dependencies.
 3. Modify `config.js` to include `MMM-BartTimes`. An example config can be seen below.
 
 ### Configuration
