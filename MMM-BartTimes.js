@@ -86,7 +86,7 @@ Module.register("MMM-BartTimes", {
         });
         this.advisory_info.forEach(advisory => {
             var lower = 0;
-            var higher = 75;
+            var higher = 40;
             if(higher > advisory.length){
                 higher = advisory.length - 1;
             }
@@ -95,12 +95,12 @@ Module.register("MMM-BartTimes", {
                 var row = document.createElement("p");
                 wrapper.appendChild(row);
                 row.innerHTML = substring;
-                row.style = "background-color:Tomato;";
-                lower = lower + 75;
+                row.style = "background-color:#990033;color:#ffffff;";
+                lower = lower + 40;
                 if(lower > advisory.length){
                     break;
                 }
-                higher = higher + 75;
+                higher = higher + 40;
                 if(higher > advisory.length){
                     higher = advisory.length - 1;
                 }
