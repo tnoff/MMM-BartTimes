@@ -4,7 +4,8 @@ Module.register("MMM-BartTimes", {
     defaults: {
         key : 'MW9S-E7SL-26DU-VV8V', // Public BART API key
         train_blacklist: [],
-        updateInterval : 30000, // 30 seconds
+        trainUpdateInterval : 30000, // 30 seconds
+        advisoryUpdateInterval : 1800000 // 30 minutes
     },
 
     // Define start sequence.
@@ -18,10 +19,10 @@ Module.register("MMM-BartTimes", {
         // Schedule update timer.
         setInterval(function() {
             self.getDepartureInfo()
-        }, this.config.updateInterval);
+        }, this.config.trainUpdateInterval);
         setInterval(function() {
             self.getAdvisoryInfo()
-        }, this.config.updateInterval);
+        }, this.config.advisoryUpdateInterval);
     },
 
     // Define required styles.
