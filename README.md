@@ -38,4 +38,4 @@ Example configuration file:
 
 When running and a BART disruption is happening, looks like this
 
-![Bart Load Times with Advisory Data](./screenshot.png)
+![Bart Load Times with Advisory Data](./advisory.png)
