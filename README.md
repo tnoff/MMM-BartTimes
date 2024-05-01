@@ -4,6 +4,8 @@ Magic Mirror module that displays the upcoming departure times for all BART (Bay
 
 This exists thanks to BART providing an easy public API, which can be found [here](http://api.bart.gov/docs/overview/index.aspx)
 
+Extends MMM-Bartimes to include advisory info for when BART is having service disruptions.
+
 ### Installation
 1. Navigate to the magic mirror modules directory and clone this repository there.
 2. Inside the `MMM-BartTimes` folder, run `npm install url needle` to install the two required dependencies.
@@ -33,6 +35,7 @@ Example configuration file:
 ```
 
 ### Screenshot
-When working, the display should look something like this:
 
-![MMM-BartTimes screenshot](screenshot.png)
+When running and a BART disruption is happening, looks like this
+
+![Bart Load Times with Advisory Data](./screenshot.png)
