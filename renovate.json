@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": ["gitlabci", "gitlabci-include", "npm"],
+  "rebaseWhen": "behind-base-branch",
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "additionalBranchPrefix": "dev-",
+      "automerge": true
+    }
+  ]
+}

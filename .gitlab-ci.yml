@@ -1,0 +1,67 @@
+include:
+  - project: 'tnoff-projects/github-workflows'
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    file: '/gitlab/renovate.yml'
+  - project: 'tnoff-projects/github-workflows'
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    file: '/gitlab/trufflehog.yml'
+  - project: 'tnoff-projects/github-workflows'
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    file: '/gitlab/bump-version.yml'
+
+stages:
+  - validate
+  - test
+  - renovate
+
+default:
+  interruptible: true
+
+trufflehog:
+  extends: .trufflehog
+  stage: validate
+  rules:
+    # Fork MRs require a project member to manually trigger jobs — prevents untrusted code from running CI automatically
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
+
+bump-version:
+  extends: .bump-version
+  variables:
+    GITLAB_PUSH_TOKEN: $RENOVATE_TOKEN
+    VERSION_FILE: package.json
+    VERSION_FILE_TYPE: json
+    VERSION_JSON_KEY: version
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\/dev-/
+
+test:
+  stage: test
+  image: docker.io/library/node:${NODE_VERSION}
+  parallel:
+    matrix:
+      - NODE_VERSION: ["20", "22"]
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+renovate:
+  extends: .renovate
+  stage: renovate
+  variables:
+    GITHUB_COM_TOKEN: $GITHUB_BOT_TOKEN
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

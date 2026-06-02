@@ -1,0 +1,4 @@
+node_modules/
+dev/MagicMirror/
+.DS_Store
+*.log
