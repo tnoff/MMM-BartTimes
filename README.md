@@ -36,13 +36,9 @@ Example configuration file:
 
 ### Development
 
-Run a local MagicMirror instance with this module enabled:
-
-```
-./dev/run.sh
-```
-
-The script clones MagicMirror into `dev/MagicMirror/` (gitignored), symlinks this repo as a module, and starts MagicMirror's server-only mode. Open the URL it prints (default `http://localhost:8181`) in any browser. Edit `dev/config.js` to change the station or add other modules. Run `npm test` from the repo root to execute the unit tests.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the local MagicMirror harness
+(`./dev/run.sh`), tests (`npm test`), and the release process. For
+code internals see [AGENTS.md](AGENTS.md).
 
 ### Screenshot
 
