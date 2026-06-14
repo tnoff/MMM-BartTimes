@@ -22,6 +22,6 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "csv-parse": "^6.0.0",
-    "gtfs-realtime-bindings": "^1.1.1"
+    "gtfs-realtime-bindings": "^2.0.0"
   }
 }
