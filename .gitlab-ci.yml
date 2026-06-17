@@ -1,12 +1,12 @@
 include:
   - project: 'tnoff-projects/github-workflows'
-    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
     file: '/gitlab/trufflehog.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
     file: '/gitlab/bump-version.yml'
 
 stages:
