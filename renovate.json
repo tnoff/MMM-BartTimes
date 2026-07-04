@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "labels": ["dependencies"],
   "enabledManagers": ["gitlabci", "gitlabci-include", "npm"],
   "rebaseWhen": "behind-base-branch",
   "packageRules": [
