@@ -3,6 +3,9 @@ include:
     ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
+    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
+    file: '/gitlab/discord-notify.yml'
+  - project: 'tnoff-projects/github-workflows'
     ref: a5e9849f148c62b128b033e79676ffb8ab4ee129
     file: '/gitlab/branch-cleanup.yml'
   - project: 'tnoff-projects/github-workflows'
@@ -28,7 +31,6 @@ trufflehog:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
       when: manual
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
 
 bump-version:
   extends: .bump-version
@@ -59,7 +61,6 @@ test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
       when: manual
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 renovate:
   extends: .renovate
@@ -82,3 +83,31 @@ branch-cleanup:
     DRY_RUN: "false"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# Discord failure notifications for the scheduled jobs — the only non-MR
+# pipelines this repo runs (post-A, trufflehog + test are MR-only). MR-time
+# validation failures are surfaced in the MR widget, so they are deliberately
+# not notified here. Webhook is the group-level DISCORD_BUILD_FAILURE_WEBHOOK.
+notify-renovate-failure:
+  extends: .discord-notify
+  stage: renovate
+  needs: [renovate]
+  variables:
+    NOTIFY_TYPE: failure
+    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
+    NOTIFY_MESSAGE: 'Renovate failed'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_failure
+
+notify-cleanup-failure:
+  extends: .discord-notify
+  stage: renovate
+  needs: [branch-cleanup]
+  variables:
+    NOTIFY_TYPE: failure
+    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
+    NOTIFY_MESSAGE: 'Branch cleanup failed'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_failure
