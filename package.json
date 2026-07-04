@@ -1,6 +1,6 @@
 {
   "name": "mmm-barttimes",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A MagicMirror module that displays BART times for the given stops",
   "main": "MMM-BartTimes.js",
   "scripts": {
