@@ -16,7 +16,7 @@ include:
     file: '/gitlab/bump-version.yml'
 
 stages:
-  - validate
+  - pr-check
   - test
   - renovate
 
@@ -30,9 +30,9 @@ default:
   tags:
     - self-hosted
 
-trufflehog:
+"pr-check:secrets":
   extends: .trufflehog
-  stage: validate
+  stage: pr-check
   rules:
     # Fork MRs require a project member to manually trigger jobs — prevents untrusted code from running CI automatically
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
@@ -49,7 +49,7 @@ bump-version:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\/dev-/
 
-test:
+"test:node":
   stage: test
   image: docker.io/library/node:${NODE_VERSION}
   parallel:
@@ -92,10 +92,11 @@ branch-cleanup:
     - if: $CI_PIPELINE_SOURCE == "schedule"
 
 # Discord failure notifications for the scheduled jobs — the only non-MR
-# pipelines this repo runs (post-A, trufflehog + test are MR-only). MR-time
-# validation failures are surfaced in the MR widget, so they are deliberately
-# not notified here. Webhook is the group-level DISCORD_BUILD_FAILURE_WEBHOOK.
-notify-renovate-failure:
+# pipelines this repo runs (post-A, pr-check:secrets + test:node are MR-only).
+# MR-time validation failures are surfaced in the MR widget, so they are
+# deliberately not notified here. Webhook is the group-level
+# DISCORD_BUILD_FAILURE_WEBHOOK.
+"notify:renovate-failure":
   extends: .discord-notify
   stage: renovate
   needs: [renovate]
@@ -107,7 +108,7 @@ notify-renovate-failure:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: on_failure
 
-notify-cleanup-failure:
+"notify:cleanup-failure":
   extends: .discord-notify
   stage: renovate
   needs: [branch-cleanup]
