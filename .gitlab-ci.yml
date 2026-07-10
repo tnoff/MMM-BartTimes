@@ -1,18 +1,18 @@
 include:
   - project: 'tnoff-projects/github-workflows'
-    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
+    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
+    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/discord-notify.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: a5e9849f148c62b128b033e79676ffb8ab4ee129
+    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/branch-cleanup.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
+    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/trufflehog.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: c8c518c35c3d1de9d816c33304e1fe1e884e1509
+    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/bump-version.yml'
 
 stages:
