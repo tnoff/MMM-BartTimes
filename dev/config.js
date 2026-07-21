@@ -19,6 +19,13 @@ let config = {
             position: "top_left",
             config: {
                 station: "19TH",
+
+                // --- 511 multi-agency example (uncomment + add a token) ---
+                // apiKey: "YOUR_511_TOKEN",   // https://511.org/open-data/token
+                // stops: [
+                //     { provider: "bart", station: "19TH", label: "19th St BART" },
+                //     { provider: "511", agency: "SF", station: "13915", label: "Church & Market (Muni)" },
+                // ],
             },
         },
     ],

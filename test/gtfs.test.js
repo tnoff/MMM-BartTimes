@@ -70,6 +70,23 @@ test("resolveStation: unknown code returns null", () => {
     assert.equal(resolveStation(gtfs, null), null);
 });
 
+test("resolveStation: numeric 511-style stop_id matches exactly, no prefix over-match", () => {
+    // Non-BART operators (e.g. Muni via 511) use numeric stop_ids and often no
+    // location_type=1 parent stations. Exact match must win without a shorter
+    // numeric code bleeding into longer ids.
+    const numericStops = [
+        { stop_id: "13915", stop_name: "Church St & Market St", location_type: "0", parent_station: "" },
+        { stop_id: "13911", stop_name: "Church St & 15th St", location_type: "0", parent_station: "" },
+    ];
+    const g = buildGtfsIndex(numericStops, [], []);
+    const r = resolveStation(g, "13915");
+    assert.ok(r);
+    assert.equal(r.stationName, "Church St & Market St");
+    assert.deepEqual([...r.platformIds], ["13915"]);
+    // "1391" is not a real stop and must not prefix-match 13915/13911.
+    assert.equal(resolveStation(g, "1391"), null);
+});
+
 test("formatMinutes boundary at 60 seconds", () => {
     assert.equal(formatMinutes(0), "Leaving");
     assert.equal(formatMinutes(30), "Leaving");
@@ -156,9 +173,9 @@ test("extractDepartures: groups by headsign, sorts by next departure, caps list"
     const out = extractDepartures(feed, gtfs, station, now, /* maxPerHeadsign */ 4);
     assert.equal(out.station_name, "Downtown Berkeley");
     // SFIA next departure (120s) comes before Richmond (600s)
-    assert.deepEqual(out.trains, ["SFIA", "Richmond"]);
-    assert.deepEqual(out.SFIA, ["2"]);
-    assert.deepEqual(out.Richmond, ["10", "30"]);
+    assert.deepEqual(out.departures.map(d => d.headsign), ["SFIA", "Richmond"]);
+    assert.deepEqual(out.departures[0].times, ["2"]);
+    assert.deepEqual(out.departures[1].times, ["10", "30"]);
 });
 
 test("extractDepartures: skips trips with SKIPPED stop_time and CANCELED trips", () => {
@@ -183,7 +200,7 @@ test("extractDepartures: skips trips with SKIPPED stop_time and CANCELED trips",
         ],
     };
     const out = extractDepartures(feed, gtfs, station, now);
-    assert.deepEqual(out.trains, []);
+    assert.deepEqual(out.departures, []);
 });
 
 test("extractDepartures: drops departures more than 30s in the past", () => {
@@ -205,7 +222,7 @@ test("extractDepartures: drops departures more than 30s in the past", () => {
     };
     const out = extractDepartures(feed, gtfs, station, now);
     // -60s dropped; -10s kept (Leaving); +600s kept (10 min)
-    assert.deepEqual(out.Richmond, ["Leaving", "10"]);
+    assert.deepEqual(out.departures, [{ headsign: "Richmond", times: ["Leaving", "10"] }]);
 });
 
 test("extractDepartures: ignores trips not in static GTFS (eBART case)", () => {
@@ -222,7 +239,7 @@ test("extractDepartures: ignores trips not in static GTFS (eBART case)", () => {
         ],
     };
     const out = extractDepartures(feed, gtfs, station, now);
-    assert.deepEqual(out.trains, []);
+    assert.deepEqual(out.departures, []);
 });
 
 test("extractDepartures: caps each headsign to maxPerHeadsign", () => {
@@ -237,7 +254,9 @@ test("extractDepartures: caps each headsign to maxPerHeadsign", () => {
         })),
     };
     const out = extractDepartures(feed, gtfs, station, now, /* maxPerHeadsign */ 3);
-    assert.equal(out.Richmond.length, 3);
+    assert.equal(out.departures.length, 1);
+    assert.equal(out.departures[0].headsign, "Richmond");
+    assert.equal(out.departures[0].times.length, 3);
 });
 
 test("extractAdvisories: emits English description, falls back to header", () => {
