@@ -24,6 +24,12 @@ Module.register("MMM-BartTimes", {
         // Show at most this many advisories per stop (0 = no limit).
         maxAdvisories: 0,
 
+        // BART trip headsigns are full line paths, e.g.
+        // "SF / OAK Airport / Dublin/Pleasanton". By default show only the
+        // final destination segment ("Dublin/Pleasanton") to keep the train
+        // column narrow; set true to show the whole path.
+        showFullHeadsign: false,
+
         trainUpdateInterval : 30000, // 30 seconds (511 stops floored to >= 90s)
         advisoryUpdateInterval : 1800000 // 30 minutes
     },
@@ -100,6 +106,34 @@ Module.register("MMM-BartTimes", {
         this.sendSocketNotification("GET_SERVICE_ADVISORY", { stop: stop });
     },
 
+    // True if a departure should be hidden. Match the trip's terminus station
+    // code (e.g. 'DUBL', 'RICH') exactly, case-insensitively — train_blacklist
+    // lists destination station codes. When the terminus code is unavailable
+    // (a feed loaded without static stop_times), fall back to a case-
+    // insensitive headsign substring match so a blacklist still does something
+    // rather than silently showing every train.
+    isBlacklistedTrain: function(dep, stop) {
+        var list = stop.train_blacklist || [];
+        if (!list.length) return false;
+        var code = dep.destCode ? String(dep.destCode).toLowerCase() : null;
+        var headsign = String(dep.headsign || "").toLowerCase();
+        return list.some(function(needle) {
+            if (!needle) return false;
+            var n = String(needle).toLowerCase();
+            return code ? code === n : headsign.indexOf(n) !== -1;
+        });
+    },
+
+    // Display label for a departure. BART headsigns are full line paths
+    // ("SF / OAK Airport / Dublin/Pleasanton"); by default show only the final
+    // destination segment so the column stays narrow.
+    headsignLabel: function(headsign) {
+        var text = String(headsign || "");
+        if (this.config.showFullHeadsign) return text;
+        var parts = text.split(" / ");
+        return parts[parts.length - 1] || text;
+    },
+
     // True if an advisory should be muted (contains a blacklisted substring,
     // case-insensitive). Combines the global list with the stop's own.
     isMutedAdvisory: function(text, stop) {
@@ -130,6 +164,7 @@ Module.register("MMM-BartTimes", {
     getDom: function() {
         var self = this;
         var wrapper = document.createElement("div");
+        wrapper.className = "MMM-BartTimes";
 
         var anyLoaded = this.stops.some(function(stop) {
             return self.stopData[stop.id] || self.stopErrors[stop.id];
@@ -171,7 +206,7 @@ Module.register("MMM-BartTimes", {
                 section.appendChild(table);
 
                 data.departures.forEach(function(dep) {
-                    if (stop.train_blacklist.includes(dep.headsign)) {
+                    if (self.isBlacklistedTrain(dep, stop)) {
                         return;
                     }
 
@@ -180,7 +215,7 @@ Module.register("MMM-BartTimes", {
 
                     var trainCell = document.createElement("td");
                     trainCell.className = "train";
-                    trainCell.innerHTML = dep.headsign;
+                    trainCell.innerHTML = self.headsignLabel(dep.headsign);
                     row.appendChild(trainCell);
 
                     dep.times.forEach(function(time_to_departure) {

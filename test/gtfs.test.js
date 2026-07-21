@@ -222,7 +222,8 @@ test("extractDepartures: drops departures more than 30s in the past", () => {
     };
     const out = extractDepartures(feed, gtfs, station, now);
     // -60s dropped; -10s kept (Leaving); +600s kept (10 min)
-    assert.deepEqual(out.departures, [{ headsign: "Richmond", times: ["Leaving", "10"] }]);
+    // destCode is null: the shared fixture is built without stop_times.
+    assert.deepEqual(out.departures, [{ headsign: "Richmond", destCode: null, times: ["Leaving", "10"] }]);
 });
 
 test("extractDepartures: ignores trips not in static GTFS (eBART case)", () => {
@@ -257,6 +258,48 @@ test("extractDepartures: caps each headsign to maxPerHeadsign", () => {
     assert.equal(out.departures.length, 1);
     assert.equal(out.departures[0].headsign, "Richmond");
     assert.equal(out.departures[0].times.length, 3);
+});
+
+// A fixture with stop_times so terminus codes can be resolved. T1 ends at the
+// RICH station (via a platform whose parent_station is RICH); the terminus
+// platform's own id differs from the station code, mirroring real BART data
+// ("L30-1" -> "DUBL").
+const termStops = [
+    { stop_id: "DBRK", stop_name: "Downtown Berkeley", location_type: "1", parent_station: "" },
+    { stop_id: "DBRK_N", stop_name: "Downtown Berkeley NB", location_type: "0", parent_station: "DBRK" },
+    { stop_id: "RICH", stop_name: "Richmond", location_type: "1", parent_station: "" },
+    { stop_id: "R60-1", stop_name: "Richmond Platform", location_type: "0", parent_station: "RICH" },
+];
+const termStopTimes = [
+    { trip_id: "T1", stop_id: "DBRK_N", stop_sequence: "1" },
+    { trip_id: "T1", stop_id: "R60-1", stop_sequence: "9" },
+    // Out-of-order sequence: the terminus must be picked by max stop_sequence,
+    // not file order.
+    { trip_id: "T2", stop_id: "R60-1", stop_sequence: "12" },
+    { trip_id: "T2", stop_id: "DBRK_N", stop_sequence: "3" },
+];
+const termGtfs = buildGtfsIndex(termStops, trips, routes, termStopTimes);
+
+test("buildGtfsIndex: tripTerminus maps trip to terminus station code", () => {
+    assert.equal(termGtfs.tripTerminus["T1"], "RICH");
+    assert.equal(termGtfs.tripTerminus["T2"], "RICH", "picks max stop_sequence regardless of file order");
+});
+
+test("extractDepartures: attaches terminus destCode to each departure", () => {
+    const now = 1_700_000_000;
+    const station = resolveStation(termGtfs, "DBRK");
+    const feed = {
+        entity: [
+            {
+                tripUpdate: {
+                    trip: { tripId: "T1" },
+                    stopTimeUpdate: [{ stopId: "DBRK_N", departure: { time: now + 300 } }],
+                },
+            },
+        ],
+    };
+    const out = extractDepartures(feed, termGtfs, station, now);
+    assert.equal(out.departures[0].destCode, "RICH");
 });
 
 test("extractAdvisories: emits English description, falls back to header", () => {

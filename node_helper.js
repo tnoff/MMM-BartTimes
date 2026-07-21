@@ -113,7 +113,12 @@ module.exports = NodeHelper.create({
             });
         };
 
-        return buildGtfsIndex(readCsv("stops.txt"), readCsv("trips.txt"), readCsv("routes.txt"));
+        return buildGtfsIndex(
+            readCsv("stops.txt"),
+            readCsv("trips.txt"),
+            readCsv("routes.txt"),
+            readCsv("stop_times.txt"),
+        );
     },
 
     fetchFeed: function(url) {

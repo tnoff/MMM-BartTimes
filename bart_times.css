@@ -1,3 +1,9 @@
+/* Cap the module width so a long advisory can't stretch the left region out
+   under the neighbouring regions. Tunable; ~32rem fits a 4-departure row on
+   one line at MagicMirror's 20px root. */
+.MMM-BartTimes {
+	max-width: 32rem;
+}
 .train {
   padding-left: 0;
   padding-right: 15px;
@@ -18,5 +24,11 @@
 	color: #ffffff;
 	padding: 2px 6px;
 	margin: 3px 0;
+	box-sizing: border-box;
 	overflow-wrap: break-word;
+	/* Fill the module width and wrap, but don't let the advisory's own long
+	   text widen the module past the departures table (width:0 keeps it out of
+	   the shrink-to-fit calc; min-width:100% then fills the resulting width). */
+	width: 0;
+	min-width: 100%;
 }

@@ -51,7 +51,8 @@ places each result in the right section (`this.stopData[id]`).
 ### `extractDepartures` returns a nested departures array
 
 `extractDepartures` returns `{ station_name, departures: [{ headsign,
-times }] }` (sorted by soonest). It used to return a flat object with
+destCode, times }] }` (sorted by soonest). `destCode` is the trip's
+terminus station code (see below). It used to return a flat object with
 dynamic headsign keys alongside `station_name`/`trains`; that collided
 with headsigns named like the reserved keys and didn't nest per stop.
 If you touch its output, update `test/gtfs.test.js` to match.
@@ -118,14 +119,36 @@ with `cause`/`effect`/`severityLevel` = `UNKNOWN` and `informedEntity` scoped to
 The fields exist in the GTFS-RT `Alert` message and some 511 agencies may
 populate them, but BART does not.
 
-### `train_blacklist` matches GTFS `trip_headsign`, not custom strings
+### Advisory width is deliberately capped in `bart_times.css`
 
-Headsigns come from `trips.txt` via `trip_headsign` (e.g.
-`"Berryessa/North San Jose"`, `"SFIA"`, `"Richmond"`). User configs
-written before the GTFS migration sometimes use short codes (`"DALY"`,
-`"SFIA"`); only the SFIA case still happens to work because GTFS uses
-the same string. If a user's blacklist stops filtering after an
-upgrade, check what BART now publishes in `trip_headsign`.
+A MagicMirror `top_left`/`top_right` region shrink-wraps to its content, so a
+long advisory banner would stretch the module across the screen and under the
+neighbouring region. `bart_times.css` prevents this two ways, both intentional —
+don't remove them: `.MMM-BartTimes` (the wrapper class set in `getDom`) has a
+`max-width` cap, and `.bart-advisory` uses `width: 0; min-width: 100%` so the
+banner fills the module width **without** contributing its own long text to the
+shrink-to-fit calc — i.e. the advisory column tracks the departures table width
+instead of widening the module. Tune the `max-width` if a 4-departure row wraps.
+
+### `train_blacklist` matches the terminus station code, not the headsign
+
+A departure's `destCode` is the trip's **terminus station code** (`DUBL`,
+`RICH`, `DALY`), and `train_blacklist` matches against it exactly
+(case-insensitive) — the config lists destination station codes, not
+headsign text. `MMM-BartTimes.js#isBlacklistedTrain` falls back to a
+case-insensitive headsign substring match only when `destCode` is absent
+(a feed loaded without `stop_times`).
+
+The terminus **must** come from static `stop_times`, not the realtime
+feed: BART's `tripupdate.aspx` truncates a trip before its terminus (a
+Richmond train's last realtime `stopTimeUpdate` is `DELN`, not `RICH`).
+`buildGtfsIndex` therefore takes a fourth arg, `stopTimes`, and computes
+`tripTerminus[trip_id]` from the last stop by `stop_sequence`, mapping the
+terminus platform to its `parent_station` code. This is why
+`node_helper.js` now reads `stop_times.txt` (~5 MB) into the 24h-cached
+static index. Note the display label (`headsignLabel`) is separate: it
+shortens the shown `trip_headsign` to its last ` / ` segment and has
+nothing to do with blacklist matching.
 
 ### BART GTFS-RT requires no API key; 511 does
 
