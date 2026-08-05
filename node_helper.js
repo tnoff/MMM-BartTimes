@@ -204,7 +204,7 @@ module.exports = NodeHelper.create({
         const platformIds = station ? station.platformIds : new Set();
 
         const feed = await this.fetchFeed(this.providerFor(stop).alertsUrl(stop));
-        return extractAdvisories(feed, platformIds);
+        return extractAdvisories(feed, platformIds, gtfs);
     },
 
     socketNotificationReceived: function(notification, payload) {

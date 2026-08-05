@@ -4,6 +4,12 @@ const assert = require("node:assert/strict");
 const {
     buildGtfsIndex,
     gtfsDate,
+    normalizeText,
+    buildStationNameIndex,
+    buildStationGraph,
+    stationsBetween,
+    stationsMentioned,
+    advisoryStations,
     serviceWindow,
     isEffectiveOn,
     parseBundleIndex,
@@ -333,7 +339,10 @@ test("extractAdvisories: emits English description, falls back to header", () =>
         ],
     };
     const out = extractAdvisories(feed, platformIds);
-    assert.deepEqual(out, ["Single tracking near DBRK", "System-wide notice"]);
+    assert.deepEqual(out, [
+        { text: "Single tracking near DBRK", stations: [] },
+        { text: "System-wide notice", stations: [] },
+    ]);
 });
 
 test("extractDepartures: only counts unmatched trips that call at this station", () => {
@@ -464,4 +473,147 @@ test("selectEffectiveBundle: nothing started yet => null", () => {
     assert.equal(selectEffectiveBundle([{ url: "next", start: "20260810", end: "20270108" }], "20260804"), null);
     assert.equal(selectEffectiveBundle([], "20260804"), null);
     assert.equal(selectEffectiveBundle(null, "20260804"), null);
+});
+
+// A miniature BART: one trunk (DALY - BALB - GLEN) forking at MCAR into a
+// Richmond leg and a Fremont leg, so paths, transfers and shared segments all
+// have something to exercise.
+const netStops = [
+    { stop_id: "DALY", stop_name: "Daly City", location_type: "1", parent_station: "" },
+    { stop_id: "BALB", stop_name: "Balboa Park", location_type: "1", parent_station: "" },
+    { stop_id: "GLEN", stop_name: "Glen Park", location_type: "1", parent_station: "" },
+    { stop_id: "MCAR", stop_name: "MacArthur", location_type: "1", parent_station: "" },
+    { stop_id: "RICH", stop_name: "Richmond", location_type: "1", parent_station: "" },
+    { stop_id: "BAYF", stop_name: "Bay Fair", location_type: "1", parent_station: "" },
+    { stop_id: "FRMT", stop_name: "Fremont", location_type: "1", parent_station: "" },
+    { stop_id: "SFIA", stop_name: "San Francisco International Airport", location_type: "1", parent_station: "" },
+    { stop_id: "16TH", stop_name: "16th Street / Mission", location_type: "1", parent_station: "" },
+    { stop_id: "24TH", stop_name: "24th Street / Mission", location_type: "1", parent_station: "" },
+    { stop_id: "DALY_1", stop_name: "Daly City Platform", location_type: "0", parent_station: "DALY" },
+];
+const netStopTimes = [
+    // Daly City -> Richmond
+    { trip_id: "N1", stop_id: "DALY_1", stop_sequence: "1" },
+    { trip_id: "N1", stop_id: "BALB", stop_sequence: "2" },
+    { trip_id: "N1", stop_id: "GLEN", stop_sequence: "3" },
+    { trip_id: "N1", stop_id: "MCAR", stop_sequence: "4" },
+    { trip_id: "N1", stop_id: "RICH", stop_sequence: "5" },
+    // Daly City -> Fremont (shares the trunk, forks at MCAR)
+    { trip_id: "N2", stop_id: "DALY_1", stop_sequence: "1" },
+    { trip_id: "N2", stop_id: "BALB", stop_sequence: "2" },
+    { trip_id: "N2", stop_id: "GLEN", stop_sequence: "3" },
+    { trip_id: "N2", stop_id: "MCAR", stop_sequence: "4" },
+    { trip_id: "N2", stop_id: "BAYF", stop_sequence: "5" },
+    { trip_id: "N2", stop_id: "FRMT", stop_sequence: "6" },
+    // A stub line that never touches the rest.
+    { trip_id: "N3", stop_id: "SFIA", stop_sequence: "1" },
+];
+const netGtfs = buildGtfsIndex(netStops, [], [], netStopTimes);
+
+test("normalizeText folds punctuation, slashes and Street", () => {
+    assert.equal(normalizeText("El Cerrito Del Norte"), "el cerrito del norte");
+    assert.equal(normalizeText("Dublin / Pleasanton"), "dublin/pleasanton");
+    assert.equal(normalizeText("Dublin/Pleasanton"), "dublin/pleasanton");
+    assert.equal(normalizeText("12th Street, Oakland."), "12th st oakland");
+    assert.equal(normalizeText(null), "");
+});
+
+test("buildStationNameIndex: full names, unique segments, aliases", () => {
+    const index = buildStationNameIndex(netStops);
+    assert.equal(index.get("bay fair"), "BAYF");
+    assert.equal(index.get("san francisco international airport"), "SFIA");
+    assert.equal(index.get("sfo"), "SFIA", "prose says SFO, GTFS says the long name");
+    // "Mission" belongs to both 16th and 24th, so it can't identify either.
+    assert.equal(index.get("mission"), undefined);
+    assert.equal(index.get("16th st"), "16TH");
+    // Platform stops are not stations and contribute nothing.
+    assert.equal(index.get("daly city platform"), undefined);
+});
+
+test("buildStationGraph: platforms collapse to stations, forks preserved", () => {
+    const graph = netGtfs.stationGraph;
+    assert.deepEqual([...graph.get("DALY")], ["BALB"], "platform DALY_1 counted as DALY");
+    assert.deepEqual([...graph.get("MCAR")].sort(), ["BAYF", "GLEN", "RICH"]);
+});
+
+test("stationsBetween returns the whole stretch, inclusive", () => {
+    const graph = netGtfs.stationGraph;
+    assert.deepEqual(stationsBetween(graph, "DALY", "RICH"), ["DALY", "BALB", "GLEN", "MCAR", "RICH"]);
+    // Reversed reads the same stretch backwards.
+    assert.deepEqual(stationsBetween(graph, "RICH", "DALY"), ["RICH", "MCAR", "GLEN", "BALB", "DALY"]);
+    // Across the fork — a rider would change at MCAR.
+    assert.deepEqual(stationsBetween(graph, "RICH", "FRMT"), ["RICH", "MCAR", "BAYF", "FRMT"]);
+    assert.deepEqual(stationsBetween(graph, "BAYF", "BAYF"), ["BAYF"]);
+    assert.deepEqual(stationsBetween(graph, "DALY", "SFIA"), [], "disconnected");
+    assert.deepEqual(stationsBetween(graph, "DALY", "NOPE"), []);
+    assert.deepEqual(stationsBetween(null, "DALY", "RICH"), []);
+});
+
+test("stationsMentioned finds stations named in prose", () => {
+    const index = netGtfs.stationNameIndex;
+    assert.deepEqual(stationsMentioned("Delays at Bay Fair station.", index).sort(), ["BAYF"]);
+    assert.deepEqual(
+        stationsMentioned("between Richmond and Fremont", index).sort(),
+        ["FRMT", "RICH"]
+    );
+    assert.deepEqual(stationsMentioned("Elevator out at SFO.", index), ["SFIA"]);
+    assert.deepEqual(stationsMentioned("Clipper card readers are down.", index), []);
+    assert.deepEqual(stationsMentioned("", index), []);
+});
+
+test("advisoryStations: a segment covers the stations in the middle", () => {
+    const { stationNameIndex: index, stationGraph: graph } = netGtfs;
+    // The case that makes naming-only filtering wrong: neither endpoint is
+    // Bay Fair, but Bay Fair is on the stretch.
+    const covered = advisoryStations("Major delays between Richmond and Fremont.", index, graph);
+    assert.deepEqual(covered.sort(), ["BAYF", "FRMT", "MCAR", "RICH"]);
+});
+
+test("advisoryStations: unrelated stretch excludes your station", () => {
+    const { stationNameIndex: index, stationGraph: graph } = netGtfs;
+    const covered = advisoryStations("Delays between Daly City and Glen Park.", index, graph);
+    assert.deepEqual(covered.sort(), ["BALB", "DALY", "GLEN"]);
+    assert.equal(covered.includes("BAYF"), false);
+});
+
+test("advisoryStations: no station named => unscoped, never mutable", () => {
+    const { stationNameIndex: index, stationGraph: graph } = netGtfs;
+    assert.deepEqual(advisoryStations("BART's schedule changes on August 10.", index, graph), []);
+});
+
+test("advisoryStations: half-read segment is treated as unscoped", () => {
+    const { stationNameIndex: index, stationGraph: graph } = netGtfs;
+    // Only one endpoint recognised ("Warm Springs" isn't in this fixture), so
+    // scoping to Fremont alone could hide a stretch that reaches your station.
+    assert.deepEqual(advisoryStations("Delays between Fremont and Warm Springs.", index, graph), []);
+    // Same sentence without segment wording is a genuine single-station scope.
+    assert.deepEqual(advisoryStations("Elevator out of service at Fremont.", index, graph), ["FRMT"]);
+});
+
+test("advisoryStations: three named stations expand pairwise", () => {
+    const { stationNameIndex: index, stationGraph: graph } = netGtfs;
+    const covered = advisoryStations("Delays between Daly City, Glen Park and Richmond.", index, graph);
+    assert.deepEqual(covered.sort(), ["BALB", "DALY", "GLEN", "MCAR", "RICH"]);
+});
+
+test("extractAdvisories: attaches the covered stations to each advisory", () => {
+    const feed = {
+        entity: [
+            {
+                alert: {
+                    descriptionText: { translation: [{ language: "en", text: "Delays between Richmond and Fremont." }] },
+                    informedEntity: [{ agencyId: "BART" }],
+                },
+            },
+            {
+                alert: {
+                    descriptionText: { translation: [{ language: "en", text: "Clipper is down." }] },
+                    informedEntity: [{ agencyId: "BART" }],
+                },
+            },
+        ],
+    };
+    const out = extractAdvisories(feed, new Set(["BAYF"]), netGtfs);
+    assert.deepEqual(out[0].stations.sort(), ["BAYF", "FRMT", "MCAR", "RICH"]);
+    assert.deepEqual(out[1].stations, [], "unscoped stays unscoped");
 });

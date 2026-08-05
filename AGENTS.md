@@ -144,6 +144,37 @@ Clipper / "Tap and Ride" ads. All three are front-end display filters
 (alongside `train_blacklist`), so they live in `MMM-BartTimes.js`, not
 `lib/gtfs.js` (the browser module can't `require` the lib).
 
+`extractAdvisories` returns `{ text, stations }`, not bare strings. `stations`
+is the set of station codes the advisory **covers**, which is not the set it
+names: for every pair of stations found in the text, `advisoryStations` adds
+the whole shortest path between them (`stationsBetween`, BFS over
+`stationGraph`). That matters — *"delays between Dublin/Pleasanton and Daly
+City"* names neither Bay Fair nor the dozen stations in between, but affects
+all of them, so filtering on named stations alone would hide it from exactly
+the riders it concerns. `stationGraph` is built once per bundle from
+consecutive stations across every trip; BART's ~7000 trips collapse to ~48
+distinct patterns and a 50-node graph.
+
+Two invariants the front-end's `isOutOfScopeAdvisory` depends on, both about
+never hiding a real disruption:
+
+- An empty `stations` means "we couldn't scope this" and must be treated as
+  system-wide (always shown) — never as "affects nothing".
+- Text that reads like a stretch (`between …`, `from … to …`) but yields only
+  **one** recognised station returns `[]` on purpose. Scoping to that single
+  station would expand to too small a segment and could mute an advisory that
+  actually reaches you.
+
+Station names are matched against prose, so `buildStationNameIndex` folds both
+sides through `normalizeText` (lowercase, punctuation stripped, `street` →
+`st`, no spaces around `/`) and indexes each station's full name, its
+slash-separated segments **where a segment identifies exactly one station**
+("Mission" belongs to both 16th and 24th, so it's dropped), plus a small alias
+table for the airports (prose says `SFO`, `stops.txt` says "San Francisco
+International Airport"). Over-matching is fine — a wider covered set only
+makes an advisory more likely to be shown. Under-matching is the dangerous
+direction, which is what the single-station rule above guards.
+
 Don't try to color/sort advisories by severity for BART: BART sends every alert
 with `cause`/`effect`/`severityLevel` = `UNKNOWN` and `informedEntity` scoped to
 `{agencyId:"BART"}` (never a stop), so all alerts are system-wide and untyped.

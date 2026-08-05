@@ -20,6 +20,7 @@ This module reads [GTFS-Realtime](https://www.bart.gov/schedules/developers/gtfs
 | `stops` | list of objects (optional) | Multi-agency form. Each entry: `{ provider, agency, station, label?, apiKey?, train_blacklist? }`. When set, it takes precedence over the legacy `station` field. |
 | `apiKey` | string (optional) | Your free 511 token, used by any `provider: '511'` stop. Register at [511.org/open-data/token](https://511.org/open-data/token). Can also be set per stop. |
 | `advisory_blacklist` | list of strings (optional) | Hide any advisory whose text contains one of these substrings (case-insensitive), e.g. `['clipper', 'tap and ride']` to mute recurring ads. Applies to every stop; a stop may add its own list. Default: `[]`. |
+| `advisory_stations` | list of strings (optional) | Station codes whose advisories you want, e.g. `['BAYF', 'BERY']`. An advisory is hidden when it scopes itself to stations and none of them are listed. Scope is the **whole stretch** an advisory describes, not just the stations it names: *"delays between Dublin/Pleasanton and Daly City"* covers Bay Fair in the middle, so it survives a `['BAYF']` list. An advisory that names no station (system-wide notices) is always shown, as is one covering a station this module displays. Applies to every stop; a stop may add its own list. Default: `[]` (no filtering). |
 | `advisoryMaxLength` | integer | Truncate each advisory to this many characters (at a word boundary, with `…`). `0` disables truncation. Default: `160`. |
 | `maxAdvisories` | integer | Show at most this many advisories per stop after muting. `0` means no limit. Default: `0`. |
 | `showFullHeadsign` | boolean | BART headsigns are full line paths (`SF / OAK Airport / Dublin/Pleasanton`). By default only the final destination segment is shown (`Dublin/Pleasanton`) to keep the column narrow. Set `true` to show the whole path. Default: `false`. |
@@ -37,6 +38,7 @@ Per-stop fields (entries of `stops`):
 | `apiKey` | string (optional) | Overrides the top-level `apiKey` for this stop. |
 | `train_blacklist` | list of strings (optional) | Destination station codes to hide for this stop (see the top-level `train_blacklist` for matching details). |
 | `advisory_blacklist` | list of strings (optional) | Extra advisory mute substrings for this stop, combined with the top-level list. |
+| `advisory_stations` | list of strings (optional) | Extra in-scope station codes for this stop, combined with the top-level list. |
 
 Example — legacy single BART station (no key needed):
 ```
@@ -66,11 +68,12 @@ Example — BART + Muni together via 511:
 ```
 
 ### Notes
-- The static GTFS bundle for each provider/agency is downloaded on first use and refreshed every 24 hours.
+- The static GTFS bundle for each provider/agency is downloaded on first use and refreshed every 24 hours. If the provider's canonical bundle turns out to be a schedule that hasn't taken effect yet (BART publishes the next one days early), the module falls back to the version actually in service — otherwise no realtime trip would match the schedule and the board would be empty.
+- **How `advisory_stations` decides scope:** the module reads the station names out of the advisory text and, for any two it finds, adds every station on the shortest path between them — so a "between A and B" advisory covers the stations in the middle too. If it can only find one station in text that reads like a stretch ("between … and …"), it treats the advisory as unscoped and shows it, rather than risk hiding a disruption that reaches you.
 - **Finding a 511 `agency` and `stop_id`:** list operators at `https://api.511.org/transit/operators?api_key=YOUR_TOKEN`, then download that operator's schedule from `https://api.511.org/transit/datafeeds?api_key=YOUR_TOKEN&operator_id=AGENCY` and read the `stop_id` column of `stops.txt`.
 - **511 rate limits:** a token allows a limited number of requests per hour. This module floors 511 refresh intervals to ≥90s and shares one feed fetch across multiple stops on the same agency, but if you add many 511 stops you may still need to raise your intervals or request a higher limit from 511.
 - BART does not publish vehicle positions in GTFS-RT, and eBART trips (Pittsburg Center / Antioch) may not appear because their schedules are managed in a separate system.
-- **Advisories are often system-wide.** BART scopes every alert to the whole agency (not a specific stop), so every station shows all current alerts — including recurring ads like "Tap and Ride" / Clipper. Use `advisory_blacklist` to mute those, `advisoryMaxLength` to keep long alerts readable, and `maxAdvisories` to cap how many show. BART also does not populate the GTFS-RT `severity`/`cause`/`effect` fields (they come through as `UNKNOWN`), so the module cannot color or sort advisories by severity for BART.
+- **Advisories are often system-wide.** BART scopes every alert to the whole agency (not a specific stop), so by default every station shows all current alerts — including recurring ads like "Tap and Ride" / Clipper. Use `advisory_blacklist` to mute those, `advisory_stations` to drop advisories about parts of the system you don't ride, `advisoryMaxLength` to keep long alerts readable, and `maxAdvisories` to cap how many show. BART also does not populate the GTFS-RT `severity`/`cause`/`effect` fields (they come through as `UNKNOWN`), so the module cannot color or sort advisories by severity for BART.
 - **Module width** is capped in `bart_times.css` (`.MMM-BartTimes { max-width }`) so a long advisory banner wraps in its own column instead of stretching the region across the screen. Adjust that value if you want the module wider or narrower.
 
 ### Development

@@ -19,6 +19,14 @@ Module.register("MMM-BartTimes", {
         // (case-insensitive), e.g. ['clipper', 'tap and ride'] to mute ads.
         // Applies to every stop; a stop may add its own list too.
         advisory_blacklist: [],
+        // Station codes whose advisories you want, e.g. ['BAYF','BERY'].
+        // An advisory is muted when it scopes itself to stations and none of
+        // them are on this list. Scope means the whole stretch it describes,
+        // not just the stations it names: "delays between Dublin/Pleasanton
+        // and Daly City" covers Bay Fair in the middle, so it survives a
+        // Bay Fair list. An advisory naming no station is always shown, as is
+        // one covering a stop this module displays. Empty = no filtering.
+        advisory_stations: [],
         // Truncate each advisory to this many characters (0 = no limit).
         advisoryMaxLength: 160,
         // Show at most this many advisories per stop (0 = no limit).
@@ -84,6 +92,7 @@ Module.register("MMM-BartTimes", {
                 label: s.label || "",
                 train_blacklist: s.train_blacklist || [],
                 advisory_blacklist: s.advisory_blacklist || [],
+                advisory_stations: s.advisory_stations || [],
             };
             if (provider === "511") {
                 var who = stop.label || stop.station || "(unnamed)";
@@ -144,10 +153,32 @@ Module.register("MMM-BartTimes", {
         });
     },
 
+    // True if an advisory covers only stations you didn't ask about. The
+    // helper resolves each advisory to every station on the stretch it
+    // describes (`stations`), so an advisory naming two far-apart stations
+    // still counts as covering everything in between. An advisory it couldn't
+    // scope arrives with an empty list and is always shown — silence about a
+    // disruption is worse than one line of noise.
+    isOutOfScopeAdvisory: function(advisory, stop) {
+        var wanted = (this.config.advisory_stations || []).concat(stop.advisory_stations || []);
+        if (!wanted.length) return false;
+
+        var stations = (advisory && advisory.stations) || [];
+        if (!stations.length) return false;
+
+        // Your own station is always in scope, however the lists are written.
+        var keep = wanted.concat([stop.station]).map(function(code) {
+            return String(code || "").toUpperCase();
+        });
+        return !stations.some(function(code) {
+            return keep.indexOf(String(code).toUpperCase()) !== -1;
+        });
+    },
+
     // Render one advisory as a single wrapping banner, truncated (at a word
     // boundary where possible) to advisoryMaxLength.
     appendAdvisory: function(container, advisory) {
-        var text = String(advisory || "");
+        var text = String((advisory && advisory.text) || "");
         var max = this.config.advisoryMaxLength;
         if (max > 0 && text.length > max) {
             var cut = text.slice(0, max);
@@ -240,8 +271,9 @@ Module.register("MMM-BartTimes", {
                 });
             }
 
-            var advisories = (self.stopAdvisories[stop.id] || []).filter(function(text) {
-                return !self.isMutedAdvisory(text, stop);
+            var advisories = (self.stopAdvisories[stop.id] || []).filter(function(advisory) {
+                return !self.isMutedAdvisory(advisory && advisory.text, stop)
+                    && !self.isOutOfScopeAdvisory(advisory, stop);
             });
             if (self.config.maxAdvisories > 0) {
                 advisories = advisories.slice(0, self.config.maxAdvisories);
