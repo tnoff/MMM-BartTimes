@@ -79,6 +79,37 @@ zip twice. If you change the TTL, the constant is `STATIC_TTL_MS`. If you
 add a new caller, return through `getStaticGtfs(stop)` — don't call
 `loadStaticGtfs(url)` directly.
 
+### The canonical static bundle can be the *next* schedule, not today's
+
+BART repoints `https://www.bart.gov/dev/schedules/google_transit.zip` at the
+upcoming schedule **days before it takes effect** (on 2026-08-04 it already
+served `google_transit_20260810-20270108_v02.zip`). Trip ids do not survive a
+schedule change, so joining a live trip update against that bundle resolves
+**nothing** — `extractDepartures` drops every trip for want of a headsign and
+the board goes blank while the advisories, which don't need the join, keep
+rendering. It looks like "advisories replaced the times"; it isn't.
+
+`getEffectiveStaticGtfs` in `node_helper.js` guards this: `buildGtfsIndex`
+computes a `serviceWindow` from `calendar.txt` + `calendar_dates.txt`, and if
+today falls outside it the helper fetches the provider's `bundleIndexUrl`
+(BART's developer page), parses the dated `…_YYYYMMDD-YYYYMMDD_vNN.zip` links
+out of it, and loads the newest bundle that has actually started. BART's
+ranges don't always meet (v09 ends 08-07, the next starts 08-10), so
+`selectEffectiveBundle` falls back to the newest *started* bundle rather than
+requiring one that covers the date. Every failure path degrades to the
+canonical bundle — never throw here, an out-of-date schedule beats none.
+
+Only `bart` sets `bundleIndexUrl`: 511's `datafeeds` endpoint serves the
+in-effect bundle, so it needs no fallback. If a provider's date handling
+looks wrong, note that GTFS dates are agency-local and compared as plain
+`YYYYMMDD` strings (`gtfsDate`), not as `Date` objects.
+
+`extractDepartures` also returns `unmatched` — the count of trips calling at
+the station that the static schedule couldn't name. A few is normal (eBART);
+all of them means the two feeds are on different schedule versions, which
+`node_helper.js` logs and the front-end surfaces as "schedule data out of
+sync" instead of an empty board.
+
 Realtime feeds are additionally deduped per URL for a short window
 (`FEED_DEDUPE_MS`, ~20s) via `fetchFeed(url)`, so N stops on the same
 agency cost one trip-update / alerts request per refresh tick. This

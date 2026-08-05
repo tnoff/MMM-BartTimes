@@ -200,6 +200,16 @@ Module.register("MMM-BartTimes", {
                 return;
             }
 
+            // Every trip calling here was dropped for want of a headsign —
+            // the static schedule and the realtime feed are on different
+            // versions. Say so instead of showing an empty board.
+            if (data && data.departures.length === 0 && data.unmatched > 0) {
+                var staleEl = document.createElement("div");
+                staleEl.className = "dimmed light xsmall";
+                staleEl.innerHTML = "Times unavailable — schedule data out of sync";
+                section.appendChild(staleEl);
+            }
+
             if (data) {
                 var table = document.createElement("table");
                 table.className = "small";

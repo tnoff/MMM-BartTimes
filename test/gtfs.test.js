@@ -3,6 +3,11 @@ const assert = require("node:assert/strict");
 
 const {
     buildGtfsIndex,
+    gtfsDate,
+    serviceWindow,
+    isEffectiveOn,
+    parseBundleIndex,
+    selectEffectiveBundle,
     resolveStation,
     formatMinutes,
     departureSeconds,
@@ -241,6 +246,7 @@ test("extractDepartures: ignores trips not in static GTFS (eBART case)", () => {
     };
     const out = extractDepartures(feed, gtfs, station, now);
     assert.deepEqual(out.departures, []);
+    assert.equal(out.unmatched, 1, "counted so a wholesale mismatch is visible");
 });
 
 test("extractDepartures: caps each headsign to maxPerHeadsign", () => {
@@ -328,4 +334,134 @@ test("extractAdvisories: emits English description, falls back to header", () =>
     };
     const out = extractAdvisories(feed, platformIds);
     assert.deepEqual(out, ["Single tracking near DBRK", "System-wide notice"]);
+});
+
+test("extractDepartures: only counts unmatched trips that call at this station", () => {
+    const now = 1_700_000_000;
+    const station = resolveStation(gtfs, "DBRK");
+    const feed = {
+        entity: [
+            {
+                tripUpdate: {
+                    trip: { tripId: "UNKNOWN_HERE" },
+                    stopTimeUpdate: [{ stopId: "DBRK_N", departure: { time: now + 300 } }],
+                },
+            },
+            {
+                tripUpdate: {
+                    trip: { tripId: "UNKNOWN_ELSEWHERE" },
+                    stopTimeUpdate: [{ stopId: "MONT_N", departure: { time: now + 300 } }],
+                },
+            },
+            {
+                tripUpdate: {
+                    trip: { tripId: "T1" },
+                    stopTimeUpdate: [{ stopId: "DBRK_N", departure: { time: now + 600 } }],
+                },
+            },
+        ],
+    };
+    const out = extractDepartures(feed, gtfs, station, now);
+    assert.equal(out.unmatched, 1);
+    assert.deepEqual(out.departures.map(d => d.headsign), ["Richmond"]);
+});
+
+test("gtfsDate renders a local-time YYYYMMDD", () => {
+    assert.equal(gtfsDate(new Date(2026, 7, 4, 23, 30)), "20260804");
+    assert.equal(gtfsDate(new Date(2026, 0, 1, 0, 0)), "20260101");
+});
+
+test("serviceWindow spans calendar.txt, widened by calendar_dates additions", () => {
+    const calendar = [
+        { service_id: "WKDY", start_date: "20260112", end_date: "20260807" },
+        { service_id: "SAT", start_date: "20260117", end_date: "20260808" },
+    ];
+    assert.deepEqual(serviceWindow(calendar), { start: "20260112", end: "20260808" });
+
+    const dates = [
+        { service_id: "HOL", date: "20260809", exception_type: "1" },
+        { service_id: "WKDY", date: "20260704", exception_type: "2" },
+    ];
+    assert.deepEqual(serviceWindow(calendar, dates), { start: "20260112", end: "20260809" });
+});
+
+test("serviceWindow: a removal alone can't establish a window; junk ignored", () => {
+    assert.equal(serviceWindow([], [{ date: "20260809", exception_type: "2" }]), null);
+    assert.equal(serviceWindow([]), null);
+    assert.equal(serviceWindow([{ start_date: "", end_date: "not-a-date" }]), null);
+});
+
+test("serviceWindow: calendar_dates-only bundles still get a window", () => {
+    // Some feeds express every service through calendar_dates.txt alone.
+    const dates = [
+        { date: "20260810", exception_type: "1" },
+        { date: "20260811", exception_type: "1" },
+    ];
+    assert.deepEqual(serviceWindow([], dates), { start: "20260810", end: "20260811" });
+});
+
+test("buildGtfsIndex exposes the bundle's service window", () => {
+    const g = buildGtfsIndex(stops, trips, routes, [], [
+        { start_date: "20260810", end_date: "20270108" },
+    ]);
+    assert.deepEqual(g.serviceWindow, { start: "20260810", end: "20270108" });
+    assert.equal(buildGtfsIndex(stops, trips, routes).serviceWindow, null);
+});
+
+test("isEffectiveOn: inclusive bounds, unknown window is usable", () => {
+    const w = { start: "20260112", end: "20260807" };
+    assert.equal(isEffectiveOn(w, "20260112"), true);
+    assert.equal(isEffectiveOn(w, "20260807"), true);
+    assert.equal(isEffectiveOn(w, "20260808"), false);
+    assert.equal(isEffectiveOn(w, "20260111"), false);
+    // The Aug 2026 case: a bundle published days before it takes effect.
+    assert.equal(isEffectiveOn({ start: "20260810", end: "20270108" }, "20260804"), false);
+    assert.equal(isEffectiveOn(null, "20260804"), true);
+});
+
+test("parseBundleIndex: pulls dated zip links, resolved and deduped", () => {
+    const html = `
+        <a href="/dev/schedules/google_transit.zip">current</a>
+        <a href="/sites/default/files/2026-07/google_transit_20260112-20260807_v09.zip">Jan 12</a>
+        <a href='/sites/default/files/2026-07/google_transit_20260112-20260807_v09.zip'>dupe</a>
+        <a href="https://example.org/gtfs_20260810-20270108_v02.zip">Aug 10</a>
+        <a href="/schedules/bybart.pdf">not a bundle</a>
+    `;
+    const out = parseBundleIndex(html, "https://www.bart.gov/schedules/developers/gtfs");
+    assert.deepEqual(out, [
+        {
+            url: "https://www.bart.gov/sites/default/files/2026-07/google_transit_20260112-20260807_v09.zip",
+            start: "20260112",
+            end: "20260807",
+        },
+        { url: "https://example.org/gtfs_20260810-20270108_v02.zip", start: "20260810", end: "20270108" },
+    ]);
+    assert.deepEqual(parseBundleIndex("", "https://www.bart.gov/"), []);
+    assert.deepEqual(parseBundleIndex(null, "https://www.bart.gov/"), []);
+});
+
+test("selectEffectiveBundle: prefers the newest bundle covering the date", () => {
+    const bundles = [
+        { url: "old", start: "20251012", end: "20260111" },
+        { url: "current", start: "20260112", end: "20260807" },
+        { url: "next", start: "20260810", end: "20270108" },
+    ];
+    assert.equal(selectEffectiveBundle(bundles, "20260804").url, "current");
+    assert.equal(selectEffectiveBundle(bundles, "20251215").url, "old");
+    assert.equal(selectEffectiveBundle(bundles, "20260810").url, "next");
+});
+
+test("selectEffectiveBundle: gap days fall back to the newest started bundle", () => {
+    // BART's ranges don't always meet: v09 ends 08-07, the next starts 08-10.
+    const bundles = [
+        { url: "current", start: "20260112", end: "20260807" },
+        { url: "next", start: "20260810", end: "20270108" },
+    ];
+    assert.equal(selectEffectiveBundle(bundles, "20260809").url, "current");
+});
+
+test("selectEffectiveBundle: nothing started yet => null", () => {
+    assert.equal(selectEffectiveBundle([{ url: "next", start: "20260810", end: "20270108" }], "20260804"), null);
+    assert.equal(selectEffectiveBundle([], "20260804"), null);
+    assert.equal(selectEffectiveBundle(null, "20260804"), null);
 });

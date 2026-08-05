@@ -4,6 +4,10 @@ const AdmZip = require("adm-zip");
 const { parse } = require("csv-parse/sync");
 const {
     buildGtfsIndex,
+    gtfsDate,
+    isEffectiveOn,
+    parseBundleIndex,
+    selectEffectiveBundle,
     resolveStation,
     extractDepartures,
     extractAdvisories,
@@ -18,6 +22,10 @@ const PROVIDERS = {
         tripUpdateUrl: () => "https://api.bart.gov/gtfsrt/tripupdate.aspx",
         alertsUrl: () => "https://api.bart.gov/gtfsrt/alerts.aspx",
         staticUrl: () => "https://www.bart.gov/dev/schedules/google_transit.zip",
+        // BART repoints google_transit.zip at the *next* schedule days before
+        // it takes effect; the page below keeps a link to the version that is
+        // still running. See getEffectiveStaticGtfs.
+        bundleIndexUrl: () => "https://www.bart.gov/schedules/developers/gtfs",
     },
     "511": {
         requiresKey: true,
@@ -81,8 +89,7 @@ module.exports = NodeHelper.create({
         if (fresh) return Promise.resolve(slot.data);
         if (slot.promise) return slot.promise;
 
-        const url = this.providerFor(stop).staticUrl(stop);
-        slot.promise = this.loadStaticGtfs(url)
+        slot.promise = this.getEffectiveStaticGtfs(stop)
             .then(g => {
                 slot.data = g;
                 slot.loadedAt = Date.now();
@@ -94,6 +101,42 @@ module.exports = NodeHelper.create({
                 throw err;
             });
         return slot.promise;
+    },
+
+    // Load the static bundle that is actually running today.
+    //
+    // A provider may publish the *next* schedule at its canonical URL days
+    // before it takes effect (BART does, ahead of each service change). Trip
+    // ids don't survive a schedule change, so joining a live trip update
+    // against a not-yet-effective bundle resolves nothing and every departure
+    // is dropped — a silently blank board for the whole pre-publish window.
+    // When the bundle we get isn't in effect yet, look for the running one in
+    // the provider's schedule index; fall back to the canonical bundle if
+    // that turns up nothing, since a stale-but-present schedule is no worse
+    // than the future one.
+    getEffectiveStaticGtfs: async function(stop) {
+        const provider = this.providerFor(stop);
+        const gtfs = await this.loadStaticGtfs(provider.staticUrl(stop));
+        const today = gtfsDate(new Date());
+        if (isEffectiveOn(gtfs.serviceWindow, today)) return gtfs;
+
+        const span = gtfs.serviceWindow;
+        console.log(`${this.name}: static bundle for ${this.describeStop(stop)} covers ${span.start}-${span.end}, not ${today} — looking for the schedule in effect`);
+        if (!provider.bundleIndexUrl) return gtfs;
+
+        try {
+            const res = await fetch(provider.bundleIndexUrl(stop), { redirect: "follow" });
+            if (!res.ok) throw new Error(`schedule index fetch failed: ${res.status}`);
+            const pick = selectEffectiveBundle(parseBundleIndex(await res.text(), res.url), today);
+            if (!pick) throw new Error("schedule index lists no bundle in effect");
+
+            const current = await this.loadStaticGtfs(pick.url);
+            console.log(`${this.name}: using ${pick.url} (${pick.start}-${pick.end}) for ${this.describeStop(stop)}`);
+            return current;
+        } catch (err) {
+            console.log(`${this.name}: no in-effect bundle for ${this.describeStop(stop)} (${err.message}); staying on the published one — departures may be empty until it takes effect`);
+            return gtfs;
+        }
     },
 
     loadStaticGtfs: async function(url) {
@@ -118,6 +161,8 @@ module.exports = NodeHelper.create({
             readCsv("trips.txt"),
             readCsv("routes.txt"),
             readCsv("stop_times.txt"),
+            readCsv("calendar.txt"),
+            readCsv("calendar_dates.txt"),
         );
     },
 
@@ -170,7 +215,8 @@ module.exports = NodeHelper.create({
         if (notification === "GET_DEPARTURE_TIMES") {
             this.getDepartureTimes(stop)
                 .then(d => {
-                    console.log("Departures loaded for", self.describeStop(stop), "->", d.station_name);
+                    const unmatched = d.unmatched ? `, ${d.unmatched} unnamed by the static schedule` : "";
+                    console.log("Departures loaded for", self.describeStop(stop), "->", d.station_name, `(${d.departures.length} headsigns${unmatched})`);
                     self.sendSocketNotification("DEPARTURE_TIMES", { id: stop.id, data: d });
                 })
                 .catch(err => {
