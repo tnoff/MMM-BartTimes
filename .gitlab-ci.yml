@@ -4,9 +4,6 @@ include:
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
     ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
-    file: '/gitlab/discord-notify.yml'
-  - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
     file: '/gitlab/branch-cleanup.yml'
   - project: 'tnoff-projects/github-workflows'
     ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
