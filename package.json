@@ -20,8 +20,12 @@
   ],
   "homepage": "https://github.com/LostVector/MMM-BartTimes#readme",
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "adm-zip": "^0.6.0",
     "csv-parse": "^7.0.0",
     "gtfs-realtime-bindings": "^2.0.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-node": "^2.1.0"
   }
 }

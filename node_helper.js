@@ -12,6 +12,14 @@ const {
     extractDepartures,
     extractAdvisories,
 } = require("./lib/gtfs");
+const {
+    withRetries,
+    httpError,
+    urlAttributes,
+    redactUrl,
+    FEED_TIMEOUT_MS,
+    STATIC_TIMEOUT_MS,
+} = require("./lib/fetching");
 
 // Provider abstraction. Each provider knows how to build its three feed URLs
 // from a normalized stop ({ provider, agency, apiKey, station }). BART is
@@ -71,6 +79,17 @@ module.exports = NodeHelper.create({
         return parts.join("/");
     },
 
+    // Attributes shared by every feed span. The station is deliberately absent:
+    // the realtime feeds are agency-wide and deduped across stops in
+    // fetchFeed, so one span routinely serves several stations. Nothing here
+    // carries the query string — that is where 511's api_key lives.
+    feedAttributes: function(stop, url) {
+        const attrs = urlAttributes(url);
+        attrs["transit.provider"] = (stop && stop.provider) || "bart";
+        if (stop && stop.agency) attrs["transit.agency"] = stop.agency;
+        return attrs;
+    },
+
     // Cache key for the static GTFS index. All BART stops share one bundle;
     // each 511 agency has its own.
     staticKey: function(stop) {
@@ -116,7 +135,8 @@ module.exports = NodeHelper.create({
     // than the future one.
     getEffectiveStaticGtfs: async function(stop) {
         const provider = this.providerFor(stop);
-        const gtfs = await this.loadStaticGtfs(provider.staticUrl(stop));
+        const staticUrl = provider.staticUrl(stop);
+        const gtfs = await this.loadStaticGtfs(staticUrl, this.feedAttributes(stop, staticUrl));
         const today = gtfsDate(new Date());
         if (isEffectiveOn(gtfs.serviceWindow, today)) return gtfs;
 
@@ -125,12 +145,19 @@ module.exports = NodeHelper.create({
         if (!provider.bundleIndexUrl) return gtfs;
 
         try {
-            const res = await fetch(provider.bundleIndexUrl(stop), { redirect: "follow" });
-            if (!res.ok) throw new Error(`schedule index fetch failed: ${res.status}`);
-            const pick = selectEffectiveBundle(parseBundleIndex(await res.text(), res.url), today);
+            const indexUrl = provider.bundleIndexUrl(stop);
+            const index = await withRetries("bart.bundle_index", this.feedAttributes(stop, indexUrl), async () => {
+                const res = await fetch(indexUrl, {
+                    redirect: "follow",
+                    signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+                });
+                if (!res.ok) throw httpError(`schedule index fetch failed: ${res.status}`, res.status);
+                return { body: await res.text(), url: res.url };
+            });
+            const pick = selectEffectiveBundle(parseBundleIndex(index.body, index.url), today);
             if (!pick) throw new Error("schedule index lists no bundle in effect");
 
-            const current = await this.loadStaticGtfs(pick.url);
+            const current = await this.loadStaticGtfs(pick.url, this.feedAttributes(stop, pick.url));
             console.log(`${this.name}: using ${pick.url} (${pick.start}-${pick.end}) for ${this.describeStop(stop)}`);
             return current;
         } catch (err) {
@@ -139,11 +166,18 @@ module.exports = NodeHelper.create({
         }
     },
 
-    loadStaticGtfs: async function(url) {
-        const res = await fetch(url, { redirect: "follow" });
-        if (!res.ok) throw new Error(`Static GTFS fetch failed: ${res.status}`);
-        const buf = Buffer.from(await res.arrayBuffer());
-        const zip = new AdmZip(buf);
+    loadStaticGtfs: async function(url, attributes) {
+        const zip = await withRetries("bart.static", attributes || urlAttributes(url), async () => {
+            const res = await fetch(url, {
+                redirect: "follow",
+                signal: AbortSignal.timeout(STATIC_TIMEOUT_MS),
+            });
+            if (!res.ok) throw httpError(`Static GTFS fetch failed: ${res.status}`, res.status);
+            const buf = Buffer.from(await res.arrayBuffer());
+            // Inside the retry on purpose: a truncated bundle throws here, and
+            // that is exactly the transient failure another attempt fixes.
+            return new AdmZip(buf);
+        });
 
         const readCsv = (name) => {
             const entry = zip.getEntry(name);
@@ -166,17 +200,19 @@ module.exports = NodeHelper.create({
         );
     },
 
-    fetchFeed: function(url) {
+    fetchFeed: function(url, spanName, attributes) {
         const now = Date.now();
         const cached = this.feedCache.get(url);
         if (cached && (now - cached.at) < FEED_DEDUPE_MS) return cached.promise;
 
-        const promise = (async () => {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Feed fetch failed (${url}): ${res.status}`);
+        // Retries live inside the deduped promise, so N stops on one agency
+        // still cost one retry chain per tick rather than one each.
+        const promise = withRetries(spanName, attributes, async () => {
+            const res = await fetch(url, { signal: AbortSignal.timeout(FEED_TIMEOUT_MS) });
+            if (!res.ok) throw httpError(`Feed fetch failed (${redactUrl(url)}): ${res.status}`, res.status);
             const buf = new Uint8Array(await res.arrayBuffer());
             return GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buf);
-        })();
+        });
 
         this.feedCache.set(url, { promise, at: now });
         // Don't let a failed fetch stay cached for the dedupe window — drop it so
@@ -193,7 +229,8 @@ module.exports = NodeHelper.create({
         const station = resolveStation(gtfs, stop.station);
         if (!station) throw new Error(`Unknown station: ${this.describeStop(stop)}`);
 
-        const feed = await this.fetchFeed(this.providerFor(stop).tripUpdateUrl(stop));
+        const url = this.providerFor(stop).tripUpdateUrl(stop);
+        const feed = await this.fetchFeed(url, "bart.tripupdate", this.feedAttributes(stop, url));
         const now = Math.floor(Date.now() / 1000);
         return extractDepartures(feed, gtfs, station, now);
     },
@@ -203,7 +240,8 @@ module.exports = NodeHelper.create({
         const station = resolveStation(gtfs, stop.station);
         const platformIds = station ? station.platformIds : new Set();
 
-        const feed = await this.fetchFeed(this.providerFor(stop).alertsUrl(stop));
+        const url = this.providerFor(stop).alertsUrl(stop);
+        const feed = await this.fetchFeed(url, "bart.alerts", this.feedAttributes(stop, url));
         return extractAdvisories(feed, platformIds, gtfs);
     },
 

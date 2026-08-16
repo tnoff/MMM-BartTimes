@@ -18,10 +18,13 @@ Bay Area agencies). A single instance can render several stops as sections.
 ├── MMM-BartTimes.js   # Front-end module — renders the DOM, polls the helper
 ├── node_helper.js     # Back-end helper — fetches the feeds, holds static GTFS cache
 ├── lib/
-│   └── gtfs.js        # Pure GTFS helpers (buildGtfsIndex, resolveStation,
-│                      # extractDepartures, extractAdvisories) — no I/O, unit-tested
+│   ├── gtfs.js        # Pure GTFS helpers (buildGtfsIndex, resolveStation,
+│   │                  # extractDepartures, extractAdvisories) — no I/O, unit-tested
+│   └── fetching.js    # Retry policy + one span per logical fetch (withRetries)
 ├── test/
-│   └── gtfs.test.js   # Node's built-in test runner against lib/gtfs.js
+│   ├── gtfs.test.js   # Node's built-in test runner against lib/gtfs.js
+│   ├── fetching.test.js  # Retry policy — no network, no mocked fetch
+│   └── tracing.test.js   # Span semantics against a real SDK + InMemorySpanExporter
 ├── dev/
 │   ├── run.sh         # Spins up a local MagicMirror with this module symlinked
 │   └── config.js      # The minimal MagicMirror config used by run.sh
@@ -114,7 +117,56 @@ Realtime feeds are additionally deduped per URL for a short window
 (`FEED_DEDUPE_MS`, ~20s) via `fetchFeed(url)`, so N stops on the same
 agency cost one trip-update / alerts request per refresh tick. This
 protects the 511 token's hourly rate limit; a failed fetch is dropped
-from the cache immediately so the next tick retries.
+from the cache immediately so the next tick retries. The in-tick retries
+(see below) live *inside* the deduped promise, so N stops on one agency
+still cost one retry chain per tick rather than one each.
+
+### Every outbound fetch goes through `withRetries` — one span, retried inside
+
+`lib/fetching.js` owns the fetch policy; `node_helper.js` supplies the work.
+Three attempts (250ms / 750ms backoff) with a per-attempt timeout, wrapped in
+**one** span per logical fetch (`bart.tripupdate`, `bart.alerts`,
+`bart.static`, `bart.bundle_index`) whose status reflects the *final* outcome.
+
+The span names are module-scoped, not provider-scoped: a 511 stop still
+produces `bart.tripupdate`, with the real provider on the `transit.provider`
+attribute. Don't put the URL on a span or in an error message — every 511
+endpoint carries `api_key` in the query string, span attributes are exported
+to a trace backend, and `DEPARTURE_ERROR` messages are rendered on the mirror
+itself. `urlAttributes` (host/path/scheme only) and `redactUrl` exist for
+exactly this; use them.
+
+Two things about this are load-bearing and easy to undo by accident:
+
+- **Tracing is suppressed while the span is open.** The auto-instrumentation
+  in the container (`magic-mirror-docker/files/node/otel-init.js`) stamps
+  `STATUS_CODE_ERROR` on any response ≥400 at response time, and an ended span
+  can't be re-statused once a later attempt succeeds — so a retried-away 500
+  would still show up as an error in Tempo. `withSpan` therefore sets
+  @opentelemetry/core's suppression context key (rebuilt via
+  `createContextKey`, which is `Symbol.for`, so it matches across the two
+  copies of `@opentelemetry/api` in the container) and the per-attempt HTTP
+  spans are never created. `instrumentation-undici` doesn't check suppression
+  itself — the SDK's `Tracer.startSpan` does, which is why this covers any
+  instrumentation running underneath.
+- **Suppression only kicks in when our span `isRecording()`.** The API package
+  registers globally per major version, so a mismatch between our copy and the
+  SDK's would make our span a silent no-op — and suppressing on top of that
+  would leave the fetch untraced entirely. Failing back to the auto spans is
+  the safe direction; keep the guard.
+
+Retry policy, and why each exclusion is deliberate: 5xx and transport failures
+(DNS, reset socket, timeout, a truncated body that fails to decode) retry; 4xx
+never does; **429 never does** — a rate-limited 511 token doesn't refill inside
+a 750ms backoff, so retrying only burns more of the ~60 req/hr quota, and the
+next refresh tick is the right retry there. Keep station lookups and validation
+*outside* the `work` callback: anything thrown in there is treated as
+transient and gets three goes.
+
+The timeouts and backoff are sized so the whole chain fits inside one refresh
+tick (`8s + 250ms + 8s + 750ms + 8s = 25s` against the 30s BART floor) — ticks
+would otherwise overlap. If you raise `FEED_TIMEOUT_MS` or `MAX_ATTEMPTS`,
+re-check that sum against `trainUpdateInterval`.
 
 ### Station code matching is case-insensitive with `_` / `-` suffixes
 
@@ -230,6 +282,7 @@ top-level `config.apiKey`.
   table.
 - New pure helpers go in `lib/gtfs.js` with tests in
   `test/gtfs.test.js`.
-- I/O stays in `node_helper.js`.
+- I/O stays in `node_helper.js`, and goes out through
+  `withRetries` from `lib/fetching.js` — not a bare `fetch`.
 - CSS classes go in `bart_times.css`. No inline styles in
   `MMM-BartTimes.js` beyond what MagicMirror already requires.
