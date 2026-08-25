@@ -5,7 +5,7 @@
   ],
   "dependencyDashboard": false,
   "labels": ["dependencies"],
-  "enabledManagers": ["gitlabci", "gitlabci-include", "npm"],
+  "enabledManagers": ["github-actions", "npm"],
   "rebaseWhen": "behind-base-branch",
   "packageRules": [
     {
