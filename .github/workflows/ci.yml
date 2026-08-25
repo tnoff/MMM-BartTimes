@@ -1,0 +1,73 @@
+name: CI
+
+# Pull-request checks. Ported from .gitlab-ci.yml as part of the
+# GitHub-canonical migration; this repo is the pilot.
+#
+# The shared jobs come from tnoff/github-workflows as reusable workflows,
+# pinned by SHA the same way the GitLab `include:` refs were. Renovate's
+# github-actions manager keeps the pins current.
+
+on:
+  pull_request:
+
+# One in-flight run per PR. Renovate force-pushes on rebase, and without this
+# every rebase leaves its predecessor running to completion. GitLab could not
+# express this: auto_cancel_pending_pipelines is fleet-disabled by design
+# because it swept pending cross-project bump triggers on a shared ref, and it
+# is per-project rather than per-workflow. Here the scope is this workflow only.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Scan for secrets
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@b3969233ccc004508c70a1b2d4a9ecd82ea57a39
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    # Fork PRs run automatically here, unlike on GitLab. There the jobs were
+    # `when: manual` because the self-hosted runner executed untrusted code
+    # inside the cluster; a GitHub-hosted runner is disposable and gets a
+    # read-only token, so the reason does not carry over.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up node ${{ matrix.node }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          # Replaces the GitLab cache keyed on package-lock.json.
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+  bump-version:
+    name: Bump version
+    # Matches the GitLab rule: only Renovate's patch branches, which carry the
+    # dev- prefix from the additionalBranchPrefix in renovate.json.
+    if: startsWith(github.head_ref, 'renovate/dev-')
+    # A called workflow cannot hold more than the caller grants, and the bump
+    # job pushes a commit. The workflow-level default above is contents: read.
+    permissions:
+      contents: write
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@b3969233ccc004508c70a1b2d4a9ecd82ea57a39
+    with:
+      version_file: package.json
+      version_file_type: json
+      version_json_key: version
+    secrets:
+      git_push_token: ${{ secrets.GIT_PUSH_TOKEN }}
