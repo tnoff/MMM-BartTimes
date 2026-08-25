@@ -25,7 +25,7 @@ permissions:
 jobs:
   secrets:
     name: Scan for secrets
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@b3969233ccc004508c70a1b2d4a9ecd82ea57a39
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@5a8471d6059f25b68b4940ac1a1db98b43ba1a7d
 
   test:
     name: Test
@@ -55,6 +55,24 @@ jobs:
       - name: Test
         run: npm test
 
+  # Supplies the code-owner approval Renovate's own PRs cannot get for
+  # themselves: GitHub refuses to let a PR author approve their own PR, and
+  # .github/CODEOWNERS + the ruleset's require_code_owner_review means one is
+  # required before automerge can proceed.
+  #
+  # This must stay on the default `pull_request` trigger types. The ruleset
+  # sets dismiss_stale_reviews_on_push and bump-version pushes to Renovate
+  # branches after the PR opens, which dismisses the approval given here --
+  # re-firing on `synchronize` is what makes the sequence converge.
+  auto-approve:
+    name: Auto-approve
+    uses: tnoff/github-workflows/.github/workflows/renovate-auto-approve.yml@5a8471d6059f25b68b4940ac1a1db98b43ba1a7d
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets:
+      approval_token: ${{ secrets.APPROVAL_TOKEN }}
+
   bump-version:
     name: Bump version
     # Matches the GitLab rule: only Renovate's patch branches, which carry the
@@ -64,7 +82,7 @@ jobs:
     # job pushes a commit. The workflow-level default above is contents: read.
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@b3969233ccc004508c70a1b2d4a9ecd82ea57a39
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@5a8471d6059f25b68b4940ac1a1db98b43ba1a7d
     with:
       version_file: package.json
       version_file_type: json
