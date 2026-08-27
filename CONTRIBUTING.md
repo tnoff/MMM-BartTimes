@@ -1,5 +1,10 @@
 # Contributing
 
-The GitHub repository is mirrored from GitLab. Please open merge requests and file issues through the GitLab project:
+This repository is canonical on GitHub. Please open pull requests and file
+issues here:
 
-**https://gitlab.com/tnoff-projects/MMM-BartTimes**
+**https://github.com/tnoff/MMM-BartTimes**
+
+The GitLab project at `tnoff-projects/MMM-BartTimes`
+is frozen and kept for history only. Merge requests opened there will not
+be seen.
