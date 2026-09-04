@@ -25,7 +25,7 @@ permissions:
 jobs:
   secrets:
     name: Scan for secrets
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8570bac7529b60e79b4fc6c837027d2f65fc0c9f
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
 
   test:
     name: Test
@@ -64,13 +64,13 @@ jobs:
     # job pushes a commit. The workflow-level default above is contents: read.
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8570bac7529b60e79b4fc6c837027d2f65fc0c9f
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
     with:
       version_file: package.json
       version_file_type: json
       version_json_key: version
     secrets:
-      app_id: ${{ secrets.CI_APP_ID }}
+      app_client_id: ${{ secrets.CI_APP_CLIENT_ID }}
       app_private_key: ${{ secrets.CI_APP_PRIVATE_KEY }}
 
   result:
