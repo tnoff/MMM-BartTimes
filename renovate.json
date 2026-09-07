@@ -1,17 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "github>tnoff/github-workflows//renovate/default-github"
   ],
-  "dependencyDashboard": false,
-  "labels": ["dependencies"],
-  "enabledManagers": ["github-actions", "npm"],
-  "rebaseWhen": "behind-base-branch",
+  "enabledManagers": ["github-actions", "npm", "custom.regex"],
   "packageRules": [
     {
       "matchUpdateTypes": ["patch"],
-      "additionalBranchPrefix": "dev-",
-      "automerge": true
+      "additionalBranchPrefix": "dev-"
     }
   ]
 }
