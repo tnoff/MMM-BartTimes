@@ -73,7 +73,7 @@ jobs:
     name: Scan for secrets
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   test:
     name: Test
@@ -114,7 +114,7 @@ jobs:
     # job pushes a commit. The workflow-level default above is contents: read.
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
     with:
       version_file: package.json
       version_file_type: json
@@ -132,7 +132,7 @@ jobs:
     name: Workflow contracts
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   result:
     name: CI result
