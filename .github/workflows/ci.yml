@@ -123,6 +123,24 @@ jobs:
       app_client_id: ${{ secrets.CI_APP_CLIENT_ID }}
       app_private_key: ${{ secrets.CI_APP_PRIVATE_KEY }}
 
+  # GitHub's semantic SAST (dataflow/taint analysis) -- this repo had zero
+  # SAST of any kind, same gap backstage had (tnoff/backstage#21). Ported
+  # from that landing: advisory only for now, no baseline yet to triage
+  # around, permissions granted explicitly because the reusable workflow's
+  # analyze job needs security-events: write to upload to this repo's own
+  # code-scanning alerts, which this workflow's contents: read default
+  # doesn't include.
+  codeql:
+    name: CodeQL
+    needs: metadata
+    if: needs.metadata.outputs.only != 'true'
+    permissions:
+      contents: read
+      security-events: write
+    uses: tnoff/github-workflows/.github/workflows/codeql.yml@7d6ac98382ec555ef3520ae1c2f07183c35e5127
+    with:
+      languages: '["javascript-typescript"]'
+
   # Catches a `uses:` whose inputs or secrets no longer match the pinned callee.
   # That mismatch fails the calling workflow at STARTUP -- no job is created, no
   # check reports, and no `workflow_run` event fires -- so neither this checks
