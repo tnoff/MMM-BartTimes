@@ -124,10 +124,11 @@ jobs:
       app_private_key: ${{ secrets.CI_APP_PRIVATE_KEY }}
 
   # GitHub's semantic SAST (dataflow/taint analysis) -- this repo had zero
-  # SAST of any kind, same gap backstage had (tnoff/backstage#21). Ported
-  # from that landing: advisory only for now, no baseline yet to triage
-  # around, permissions granted explicitly because the reusable workflow's
-  # analyze job needs security-events: write to upload to this repo's own
+  # SAST of any kind, same gap backstage had (tnoff/backstage#21). First run
+  # came back with 0 findings, so promoted straight into result's needs --
+  # there was never a baseline of pre-existing debt to triage around here.
+  # Permissions granted explicitly because the reusable workflow's analyze
+  # job needs security-events: write to upload to this repo's own
   # code-scanning alerts, which this workflow's contents: read default
   # doesn't include.
   codeql:
@@ -163,7 +164,7 @@ jobs:
     # This job always runs and its name never changes, so the ruleset requires
     # exactly one context and the jobs underneath stay free to change.
     if: always()
-    needs: [secrets, test, contracts, metadata]
+    needs: [secrets, test, contracts, metadata, codeql]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -174,6 +175,7 @@ jobs:
           echo "metadata:  ${{ needs.metadata.result }}"
           echo "test:      ${{ needs.test.result }}"
           echo "contracts: ${{ needs.contracts.result }}"
+          echo "codeql:    ${{ needs.codeql.result }}"
 
       - name: Fail if any job failed
         # `skipped` is deliberately allowed: with allow_fork_prs false a fork
@@ -182,7 +184,8 @@ jobs:
           needs.secrets.result == 'failure' || needs.secrets.result == 'cancelled' ||
           needs.test.result == 'failure' || needs.test.result == 'cancelled' ||
           needs.contracts.result == 'failure' || needs.contracts.result == 'cancelled' ||
-          needs.metadata.result == 'failure' || needs.metadata.result == 'cancelled'
+          needs.metadata.result == 'failure' || needs.metadata.result == 'cancelled' ||
+          needs.codeql.result == 'failure' || needs.codeql.result == 'cancelled'
         run: |
           echo "::error::One or more CI jobs did not pass."
           exit 1
