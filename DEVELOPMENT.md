@@ -6,8 +6,8 @@ internals see [AGENTS.md](AGENTS.md).
 
 ## Prerequisites
 
-- Node 22+ (Node's built-in test runner is used; older Nodes work for
-  the module itself but not for `npm test`)
+- Node 20+ (CI runs `npm test` on Node 20 and 22; the built-in test
+  runner is used)
 - Git
 - A browser to render the MagicMirror UI
 
@@ -49,11 +49,14 @@ modules.
 npm test
 ```
 
-Uses Node's built-in `node --test` runner against
-`test/gtfs.test.js`. All tests are against `lib/gtfs.js`, which is
-intentionally pure (no I/O, no MagicMirror dependencies — see
-[AGENTS.md](AGENTS.md#libgtfsjs-is-intentionally-pure)). Add new
-helper tests to `test/gtfs.test.js`.
+Uses Node's built-in `node --test` runner:
+
+- `test/gtfs.test.js` — `lib/gtfs.js`, which is intentionally pure (no I/O,
+  no MagicMirror dependencies — see
+  [AGENTS.md](AGENTS.md#libgtfsjs-is-intentionally-pure)). Add new helper
+  tests here.
+- `test/fetching.test.js` — the retry policy in `lib/fetching.js`.
+- `test/tracing.test.js` — span semantics against a real SDK.
 
 ## Iterating
 
@@ -63,10 +66,18 @@ MagicMirror server (Ctrl-C, re-run `./dev/run.sh`) to pick up
 back-end changes. Front-end (`MMM-BartTimes.js`, `bart_times.css`)
 takes effect on a browser reload.
 
+## CI
+
+GitHub Actions (`ci.yml`, PRs) runs `npm ci && npm test` on Node 20 and 22,
+plus shared workflows from `tnoff/github-workflows`: `trufflehog.yml`,
+`codeql.yml`, `check-workflow-contracts.yml`, and `bump-version.yml` on
+`renovate/dev-*` PRs (bumps `version` in `package.json`).
+`scheduled.yml` runs Renovate and branch cleanup; `notify-failure.yml` posts
+failures to Discord.
+
 ## Releasing
 
-The version lives in `package.json`. Bump it on a release branch,
-merge to `master`, push a matching `v<version>` git tag — there's no
-publish-to-npm step; consumers clone the repo or pull the SHA via
-their own MagicMirror Docker build (see
-`tnoff-projects/magic-mirror-docker`).
+There is no release job, git tag, or npm publish. The version lives in
+`package.json` (CI bumps it on Renovate dependency PRs). Consumers pick up
+changes by commit: `tnoff/magic-mirror-docker` pins this repo's `main` by
+SHA (`ARG MMM_BARTTIMES_REF`, bumped by Renovate) and rebuilds the image.
