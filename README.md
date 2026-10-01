@@ -7,7 +7,7 @@ It can also show departures for **any Bay Area transit agency** (Muni, AC Transi
 This module reads [GTFS-Realtime](https://www.bart.gov/schedules/developers/gtfs-realtime) feeds (trip updates and service alerts) and joins them against the [static GTFS schedule](https://www.bart.gov/schedules/developers/gtfs) to compute live departure times. BART's own feeds need no API key; 511 requires a free key (see below).
 
 ### Installation
-1. Navigate to the magic mirror modules directory and clone this repository there.
+1. Navigate to the magic mirror modules directory and clone this repository there. (The `tnoff/magic-mirror-docker` image does this for you: it fetches this repo at a Renovate-pinned commit at build time and runs `npm install --omit=dev`.)
 2. Inside the `MMM-BartTimes` folder, run `npm install` to install dependencies.
 3. Modify `config.js` to include `MMM-BartTimes`. An example config is below.
 

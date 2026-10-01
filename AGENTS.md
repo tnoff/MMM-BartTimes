@@ -55,10 +55,8 @@ places each result in the right section (`this.stopData[id]`).
 
 `extractDepartures` returns `{ station_name, departures: [{ headsign,
 destCode, times }] }` (sorted by soonest). `destCode` is the trip's
-terminus station code (see below). It used to return a flat object with
-dynamic headsign keys alongside `station_name`/`trains`; that collided
-with headsigns named like the reserved keys and didn't nest per stop.
-If you touch its output, update `test/gtfs.test.js` to match.
+terminus station code (see below). If you touch its output, update
+`test/gtfs.test.js` to match.
 
 ### `lib/gtfs.js` is intentionally pure
 
@@ -188,8 +186,7 @@ the realtime cancellation flags when the feed *is* live.
 ### Advisories: wrapped + truncated, muted by substring, not typed
 
 `extractAdvisories` returns plain strings; the front-end renders each as one
-wrapping `.bart-advisory` banner in `appendAdvisory` — NOT the old 40-char
-manual chunker (which broke words mid-line). `advisoryMaxLength` truncates at a
+wrapping `.bart-advisory` banner in `appendAdvisory`. `advisoryMaxLength` truncates at a
 word boundary with `…`; `maxAdvisories` caps the count; `advisory_blacklist`
 (global + per-stop, case-insensitive substring) mutes recurring noise like the
 Clipper / "Tap and Ride" ads. All three are front-end display filters
@@ -259,7 +256,7 @@ Richmond train's last realtime `stopTimeUpdate` is `DELN`, not `RICH`).
 `buildGtfsIndex` therefore takes a fourth arg, `stopTimes`, and computes
 `tripTerminus[trip_id]` from the last stop by `stop_sequence`, mapping the
 terminus platform to its `parent_station` code. This is why
-`node_helper.js` now reads `stop_times.txt` (~5 MB) into the 24h-cached
+`node_helper.js` reads `stop_times.txt` (~5 MB) into the 24h-cached
 static index. Note the display label (`headsignLabel`) is separate: it
 shortens the shown `trip_headsign` to its last ` / ` segment and has
 nothing to do with blacklist matching.
@@ -268,7 +265,7 @@ nothing to do with blacklist matching.
 
 BART's `tripupdate.aspx` and `alerts.aspx` are public, unauthenticated,
 and rate-limit-friendly — don't reintroduce a key requirement for the
-`bart` provider (the old V2 BART API was retired). The **511** provider
+`bart` provider. The **511** provider
 is different: every 511 endpoint requires an `api_key` query param, and
 tokens are rate-limited (~60 req/hr), which is why 511 refresh intervals
 are floored (≥90s) in the front-end and feeds are deduped in
