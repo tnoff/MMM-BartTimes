@@ -57,7 +57,7 @@ Everything under a module's `config` is sent to the browser (MagicMirror serves 
 at `/config/`, unauthenticated), so a key in `config.js` is public. `node_helper.js`
 runs `resolveApiKey` (`lib/keys.js`) on each incoming stop and fills a missing
 `apiKey` from the environment: the stop's `apiKeyEnv`, then the module's, then the
-provider default (`FIVE11_API_KEY` for 511); `apiKeyEnv` may be a list. An explicit
+provider default (`FIVE11_API_KEY` for 511, `BART_API_KEY` for BART; never crossed); `apiKeyEnv` may be a list. BART's feeds are keyless, so the BART value is resolved but not yet used by any URL. An explicit
 `apiKey` still wins. The front-end deliberately does not warn about a missing key,
 because it cannot see the server environment; the helper errors if neither exists.
 

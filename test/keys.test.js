@@ -52,9 +52,16 @@ test("leaves the stop alone when no key is found", () => {
     assert.equal(resolveApiKey(undefined, {}), undefined);
 });
 
-test("a keyless BART stop never gets a key from the default", () => {
+test("a BART stop reads BART_API_KEY, never the 511 variable", () => {
     const bart = { provider: "bart", station: "19TH" };
-    assert.equal(resolveApiKey(bart, { [DEFAULT_511]: "x", BART_API_KEY: "y" }), bart);
+    assert.equal(DEFAULT_KEY_ENV.bart, "BART_API_KEY");
+    assert.equal(resolveApiKey(bart, { BART_API_KEY: "bart-key" }).apiKey, "bart-key");
+    assert.equal(resolveApiKey(bart, { [DEFAULT_511]: "five11" }), bart);
+});
+
+test("a stop with no provider is a BART stop", () => {
+    const legacy = { station: "19TH" };
+    assert.equal(resolveApiKey(legacy, { BART_API_KEY: "bart-key" }).apiKey, "bart-key");
 });
 
 test("does not mutate the stop it was given", () => {
