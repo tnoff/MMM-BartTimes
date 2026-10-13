@@ -56,7 +56,8 @@ places each result in the right section (`this.stopData[id]`).
 Everything under a module's `config` is sent to the browser (MagicMirror serves it
 at `/config/`, unauthenticated), so a key in `config.js` is public. `node_helper.js`
 runs `resolveApiKey` (`lib/keys.js`) on each incoming stop and fills a missing
-`apiKey` from `process.env[apiKeyEnv]` (default `BART_API_KEY`); an explicit
+`apiKey` from the environment: the stop's `apiKeyEnv`, then the module's, then the
+provider default (`FIVE11_API_KEY` for 511); `apiKeyEnv` may be a list. An explicit
 `apiKey` still wins. The front-end deliberately does not warn about a missing key,
 because it cannot see the server environment; the helper errors if neither exists.
 

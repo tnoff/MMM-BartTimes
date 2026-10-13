@@ -67,7 +67,7 @@ module.exports = NodeHelper.create({
         const provider = PROVIDERS[name];
         if (!provider) throw new Error(`Unknown provider: ${name}`);
         if (provider.requiresKey) {
-            if (!stop.apiKey) throw new Error(`Provider ${name} requires an apiKey: set config.apiKey, or the BART_API_KEY environment variable on the server (${this.describeStop(stop)})`);
+            if (!stop.apiKey) throw new Error(`Provider ${name} requires an apiKey: set config.apiKey, or the server environment variable named by apiKeyEnv (default FIVE11_API_KEY) (${this.describeStop(stop)})`);
             if (!stop.agency) throw new Error(`Provider ${name} requires an agency (${this.describeStop(stop)})`);
         }
         return provider;

@@ -4,13 +4,15 @@ Module.register("MMM-BartTimes", {
     defaults: {
         // 511 API key (optional; only needed if a stop uses provider '511').
         // One token covers every agency. Register: https://511.org/open-data/token
-        // Prefer leaving this empty and setting the BART_API_KEY environment
-        // variable on the server (or apiKeyEnv below): everything in `config` is
-        // sent to every browser, so a key written here is public.
+        // Prefer leaving this empty and supplying the key through the server
+        // environment (see apiKeyEnv): everything in `config` is sent to every
+        // browser, so a key written here is public.
         apiKey: '',
-        // Name of the server environment variable the node helper reads the 511
-        // key from when no apiKey is configured. May also be set per stop.
-        apiKeyEnv: 'BART_API_KEY',
+        // Server environment variable(s) the node helper reads the key from when
+        // no apiKey is configured: a name, or a list (first one set wins). May also
+        // be set per stop, so different stops can use different keys. Empty uses
+        // the provider's default (FIVE11_API_KEY for 511).
+        apiKeyEnv: '',
 
         // New multi-stop form. Each entry:
         //   { provider: 'bart'|'511', agency, station, label?, apiKey?, train_blacklist? }
