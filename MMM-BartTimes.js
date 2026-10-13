@@ -4,7 +4,13 @@ Module.register("MMM-BartTimes", {
     defaults: {
         // 511 API key (optional; only needed if a stop uses provider '511').
         // One token covers every agency. Register: https://511.org/open-data/token
+        // Prefer leaving this empty and setting the BART_API_KEY environment
+        // variable on the server (or apiKeyEnv below): everything in `config` is
+        // sent to every browser, so a key written here is public.
         apiKey: '',
+        // Name of the server environment variable the node helper reads the 511
+        // key from when no apiKey is configured. May also be set per stop.
+        apiKeyEnv: 'BART_API_KEY',
 
         // New multi-stop form. Each entry:
         //   { provider: 'bart'|'511', agency, station, label?, apiKey?, train_blacklist? }
@@ -88,6 +94,7 @@ Module.register("MMM-BartTimes", {
                 provider: provider,
                 agency: agency,
                 apiKey: s.apiKey || cfg.apiKey || "",
+                apiKeyEnv: s.apiKeyEnv || cfg.apiKeyEnv || "",
                 station: s.station,
                 label: s.label || "",
                 train_blacklist: s.train_blacklist || [],
@@ -96,7 +103,7 @@ Module.register("MMM-BartTimes", {
             };
             if (provider === "511") {
                 var who = stop.label || stop.station || "(unnamed)";
-                if (!stop.apiKey) Log.warn(self.name + ": 511 stop '" + who + "' has no apiKey (set config.apiKey or a per-stop apiKey)");
+                // No apiKey warning here: the key may come from the server's environment, which the browser cannot see. The node helper errors clearly if it finds none.
                 if (!stop.agency) Log.warn(self.name + ": 511 stop '" + who + "' has no agency");
             }
             return stop;

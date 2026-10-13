@@ -51,6 +51,15 @@ list in `normalizeStops()`, assigning each stop a stable `id`. Socket
 requests carry `{ stop }`; responses echo `{ id, ... }` so the front-end
 places each result in the right section (`this.stopData[id]`).
 
+### The 511 key should come from the server environment
+
+Everything under a module's `config` is sent to the browser (MagicMirror serves it
+at `/config/`, unauthenticated), so a key in `config.js` is public. `node_helper.js`
+runs `resolveApiKey` (`lib/keys.js`) on each incoming stop and fills a missing
+`apiKey` from `process.env[apiKeyEnv]` (default `BART_API_KEY`); an explicit
+`apiKey` still wins. The front-end deliberately does not warn about a missing key,
+because it cannot see the server environment; the helper errors if neither exists.
+
 ### `extractDepartures` returns a nested departures array
 
 `extractDepartures` returns `{ station_name, departures: [{ headsign,

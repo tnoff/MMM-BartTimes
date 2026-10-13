@@ -20,6 +20,7 @@ const {
     FEED_TIMEOUT_MS,
     STATIC_TIMEOUT_MS,
 } = require("./lib/fetching");
+const { resolveApiKey } = require("./lib/keys");
 
 // Provider abstraction. Each provider knows how to build its three feed URLs
 // from a normalized stop ({ provider, agency, apiKey, station }). BART is
@@ -66,7 +67,7 @@ module.exports = NodeHelper.create({
         const provider = PROVIDERS[name];
         if (!provider) throw new Error(`Unknown provider: ${name}`);
         if (provider.requiresKey) {
-            if (!stop.apiKey) throw new Error(`Provider ${name} requires an apiKey (${this.describeStop(stop)})`);
+            if (!stop.apiKey) throw new Error(`Provider ${name} requires an apiKey: set config.apiKey, or the BART_API_KEY environment variable on the server (${this.describeStop(stop)})`);
             if (!stop.agency) throw new Error(`Provider ${name} requires an agency (${this.describeStop(stop)})`);
         }
         return provider;
@@ -247,7 +248,9 @@ module.exports = NodeHelper.create({
 
     socketNotificationReceived: function(notification, payload) {
         const self = this;
-        const stop = payload && payload.stop;
+        // The key comes from the server environment when the config omits it,
+        // so it never has to travel in the client-visible config. See lib/keys.js.
+        const stop = resolveApiKey(payload && payload.stop, process.env);
         if (!stop) return;
 
         if (notification === "GET_DEPARTURE_TIMES") {
