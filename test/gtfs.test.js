@@ -19,6 +19,7 @@ const {
     departureSeconds,
     translation,
     alertAppliesToStation,
+    routesServing,
     extractDepartures,
     extractAdvisories,
 } = require("../lib/gtfs");
@@ -147,6 +148,46 @@ test("alertAppliesToStation: stop-scoped but not our station => excluded", () =>
 test("alertAppliesToStation: route/agency-only scope => included", () => {
     const alert = { informedEntity: [{ routeId: "R1" }] };
     assert.equal(alertAppliesToStation(alert, new Set(["DBRK_N"])), true);
+});
+
+test("alertAppliesToStation: route-scoped alert applies only when the route calls here", () => {
+    const alert = { informedEntity: [{ agencyId: "SC", routeId: "70" }] };
+    assert.equal(alertAppliesToStation(alert, new Set(["S1"]), new Set(["70", "71"])), true);
+    assert.equal(alertAppliesToStation(alert, new Set(["S1"]), new Set(["902"])), false);
+});
+
+test("alertAppliesToStation: route-scoped alert is shown when the stop's routes are unknown", () => {
+    const alert = { informedEntity: [{ routeId: "70" }] };
+    assert.equal(alertAppliesToStation(alert, new Set(["S1"]), new Set()), true);
+    assert.equal(alertAppliesToStation(alert, new Set(["S1"]), null), true);
+});
+
+test("alertAppliesToStation: agency-only alert always applies; a stop outranks its route", () => {
+    const routes = new Set(["902"]);
+    assert.equal(alertAppliesToStation({ informedEntity: [{ agencyId: "SC" }] }, new Set(["S1"]), routes), true);
+    const closure = { informedEntity: [{ routeId: "902" }, { stopId: "OTHER" }] };
+    assert.equal(alertAppliesToStation(closure, new Set(["S1"]), routes), false);
+});
+
+test("routesServing / extractAdvisories: a light-rail stop drops bus-route alerts", () => {
+    const idx = buildGtfsIndex(
+        [{ stop_id: "S1", stop_name: "Karina" }, { stop_id: "S2", stop_name: "Bus stop" }],
+        [{ trip_id: "TR", route_id: "902" }, { trip_id: "TB", route_id: "70" }],
+        [{ route_id: "902" }, { route_id: "70" }],
+        [
+            { trip_id: "TR", stop_id: "S1", stop_sequence: "1" },
+            { trip_id: "TB", stop_id: "S2", stop_sequence: "1" },
+        ]
+    );
+    assert.deepEqual([...routesServing(idx, new Set(["S1"]))], ["902"]);
+    const text = (t) => ({ translation: [{ language: "en", text: t }] });
+    const feed = { entity: [
+        { alert: { informedEntity: [{ agencyId: "SC" }], descriptionText: text("agency-wide") } },
+        { alert: { informedEntity: [{ routeId: "70" }], descriptionText: text("bus detour") } },
+        { alert: { informedEntity: [{ routeId: "902" }], descriptionText: text("light rail") } },
+    ] };
+    const got = extractAdvisories(feed, new Set(["S1"]), idx).map(a => a.text);
+    assert.deepEqual(got, ["agency-wide", "light rail"]);
 });
 
 test("extractDepartures: groups by headsign, sorts by next departure, caps list", () => {
