@@ -3,11 +3,24 @@
   "extends": [
     "github>tnoff/github-workflows//renovate/default-github"
   ],
-  "enabledManagers": ["github-actions", "npm", "custom.regex"],
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "custom.regex"
+  ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "additionalBranchPrefix": "dev-"
+    },
+    {
+      "description": "CI-only updates (action pins, reusable-workflow pins) change nothing that ships, so they must not cut a release. Listed last so it overrides the dev- prefix above; ci.yml's bump-version job only fires on renovate/dev-.",
+      "matchFileNames": [
+        ".github/**"
+      ],
+      "additionalBranchPrefix": "ci-"
     }
   ]
 }
